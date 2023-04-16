@@ -6,7 +6,7 @@ const apiurl = process.env.REACT_APP_API_URL;
 
 console.log(process.env.REACT_APP_API_URL)
 
-function User() {
+function User(props) {
   const [formData, setFormData] = useState({});
   const [data, setData] = useState([]);
   const handleInputChange = (event) => {
@@ -16,7 +16,12 @@ function User() {
 
   const ListUser = async () => {
 
-    await fetch(`${apiurl}/crud-operation/rest/getAllUser`)
+    await fetch(`${apiurl}/crud-operation/rest/getAllUser`, {
+      headers: {
+        Authorization: `Bearer ${props.token}`,
+        "Content-Type": "application/json",
+      },
+    })
       .then(response => response.json())
       .then(data => {
         console.log(data);
@@ -28,7 +33,10 @@ function User() {
 
   const handleDelete = (id) => {
     fetch(`${apiurl}/crud-operation/rest/delete/user/` + id, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${props.token}`,
+      },
     })
       .then(response => {
         console.log(response);
@@ -36,7 +44,7 @@ function User() {
       .catch(error => {
         console.log(error);
       });
-    window.location.reload(false);
+   // window.location.reload(false);
   }
 
   const handleSubmit = (event) => {
@@ -46,6 +54,7 @@ function User() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${props.token}`,
       },
       body: JSON.stringify(formData),
     })

@@ -1,8 +1,12 @@
 {
-    "realm": "reactjs",
-    "auth-server-url": "http://localhost:8080/",
-    "ssl-required": "external",
-    "resource": "react-client",
-    "public-client": true,
-    "confidential-port": 0
-  }
+  "realm": "react-spring",
+  "auth-server-url": "http://localhost:8080/",
+  "ssl-required": "external",
+  "resource": "react",
+  "verify-token-audience": true,
+  "credentials": {
+    "secret": "03eCauCesteHhQsLnCvLS0JT4JnAOWxx"
+  },
+  "use-resource-role-mappings": true,
+  "confidential-port": 0
+}
