@@ -1,1 +1,298 @@
 How to integrate with MACMA:
+
+1. MACMA's APIs documentation
+The MACMA API documentation can be found under the under https://<service root path>/doc 
+
+Please consider that the base url for MACMA needs to be configurable via an environment variable for your application.
+
+The base URL for MACMA could differ either bei sub path and/or by (sub) domain.
+
+A base URL is defined as such: <PROTOCOL>://<DOMAIN_NAME>/<BASE_PATH> and configured by an operator during deployment.
+
+This means DOMAIN_NAME and BASE_PATH are defined by the operator and not by the application itself!
+
+Hence, bath URLs could look like either
+
+https://nexeed-server.de.bosch.com/iam
+https://nexeed-server.de.bosch.com/sub-path-a
+https://nexeed-server.de.bosch.com/sub-path-a/sub-path-b
+...
+or
+
+https://iam.nexeed-server.de.bosch.com/
+https://macma-sub-domain-a.nexeed-server.de.bosch.com/
+https://macma-sub-domain-a.macma-sub-domain-b.nexeed-server.de.bosch.com/
+...
+or even
+
+https://macma-sub-domain-b.nexeed-server.de.bosch.com/sub-path-a
+...
+In consequence the stable API starts after the base URL and looks like, e.g. for the token endpoint
+
+https://nexeed-integration-qa.de.bosch.com/iam/access-management/v1/openid-connect/userinfo
+https://iam.nexeed-integration-qa.de.bosch.com/access-management/v1/openid-connect/userinfo
+
+
+OAuth2 / OpenID Connect basics:
+
+ Endpoints supporting Authentication and Authorization
+2. Register Application
+Your application must be registered in the system. Contact your environment's administrator (for BCI the BCI Operation and Support Home is the first contact). The result of the onboarding will be client credentials that are required for various functionalities listed on this page.
+
+There are three options for client credentials:
+
+(warning) (not yet supported) JWT based with you application offering a JWK Set endpoint, so that MACMA can automatically load your application's public key(s) to verify the tokens sent by your applications.
+(warning) (not yet supported) JWT based with preshared public key. Same as above, but not using dynamic public configuration. This may be problematic in case of different key fingerprinting algorithms (.NET vs Java)
+Client Secret (preshared secret)
+3. Register Resources and Roles (on application startup or scripted)
+The concept for registering resources and roles can be found at 011 System Deployment and Bootstrapping Process.
+
+The Nexeed IAS ansible scripts currently do not yet deploy Nexeed IAS that way due to missing robustness of some modules for missing privileges. They do
+
+Start MACMA
+Scripted registration of all application's roles and resources
+Assign role to other application's clients if required for service-to-service communication
+Start Portal
+Start all other applications
+If an application does register roles and resources itself, they won't be available in step 2. Please consult with BCI/Ops and customers which approach better suits your environments and operation models concerning setup and operation effort.
+
+3.1. Resources
+An application should register its resources on startupor by deployment scripts. There are separate endpoints to register and to delete resources. Both endpoints are idempotent, meaning you can register your set of resources as often as you want, or delete the same resources as often as you want, the outcome will always be the same.
+
+Typically an application would register general resources like "all machines" or "all lines" including meaningful privileges available to use or access those resources.
+
+A tenant can define custom tenant roles that are granted privileges on those resources. Keep that in mind when changing or reorganizing the registered resources.
+
+A resource of an application is identified by its id and type, the latter typically being a URN like urn:isan:0000-0000-9E59-0000-O-0000-0000-2.
+
+API: https://portal.bosch-nexeed.com/iam/doc/api/#tag/Application-Management-Bulk
+
+Concept with further information: MACMA Resource Registration
+
+3.2. Roles
+An application should register its roles on startup or by deployment scripts. There are separate endpoints to register and to delete roles. Both endpoints are idempotent, meaning you can register your set of roles as often as you want, or delete the same roles as often as you want, the outcome will always be the same.
+
+Application roles should offer a set of typical roles required to make use of the application. Those roles definitions contain a list of granted privileges to access general resources of the application.
+
+Application functionalities can be shared with other tenants via contracts containing these application roles (custom tenant roles cannot be shared).
+
+API: https://portal.bosch-nexeed.com/iam/doc/api/#tag/Application-Management-Bulk
+
+Guide to role naming: 007 - Role name recommendation 
+
+Concept with further information: MACMA Roles
+
+4. Managing access to your application (application access management)
+Some user approaches your application. How do you decide based on MACMA whether to grant access to your resource or not.
+
+4.1. You need
+An application in MACMA representing your solution
+A confidential client
+4.2. Authorization decision for incoming requests (to your API)
+MACMA's API documentation about access management.
+
+See also 01 Introduction and Context#01IntroductionandContext-Accessmanagementforrequests to get an overview over the interactions involved here.
+
+4.2.1. ACL (access control list) loading
+The ACL links roles to privileges on resources and therefore is required for authorization decisions. It should regularly be updated. You can do this with any tenant in which your client exists, the ACL returned for your application will be the same for any of them. Typically you'd use your own tenant that provides your application to the system.
+
+There are some recommendations to follow:
+
+Never couple the ACL download to other requests as it may take several seconds to load and causes significant strain on the system due to its potential size.
+
+Refreshing the ACL
+
+There is no explicit event based notification in place to trigger the ACL download yet. Events like when a role has been changed or a tenant or contract has been created can be used to trigger a refresh of the ACL. Which events are relevant is currently up to the application. We also do not emit transitive events, so be careful.
+
+Current recommendation is to refresh using a schedule based on cache-control headers returned by MACMA or an individual schedule like once every minute.
+
+Consider persisting the ACL together with the resources which are managed by the resource server (→ speeds up a process restart).
+
+HTTP based caching might not the right place for this kind of information. It optimizes the number of downloads and therefore usage of the network resources, but the HTTP cache can’t be joined at DB level while querying the requested resources.
+Respect the ACL within DB queries → easier filtering and pagination.
+
+4.2.2. Authorization decision
+If there is an Authorization header, use the token provided after the prefix "Bearer ".
+If you use cookies: check all cookies with the expected name for your authorization cookies
+If there isn't any valid cookie:
+for requests to html pages either redirect user to login or offer the user a possibility to trigger login in the UI
+for requests to API endpoints: return 401 unauthorized
+Send the received token (from header or cookie) to MACMA's OAuth2 /introspect endpoint to check if it is valid. If valid, this endpoint will also return the list of roles granted by the token. You can cache the response for a specific token for a while (a few seconds or minutes) if you use OAuth2 backchannel logout to terminate the user's session. The /introspect endpoint has to be used, as MACMA's access tokens shall be handled as opaque strings. By using the OAuth2 /introspect endpoint, additional token signature validation using the authorization server's JWKs set as well as further claim checks are obsolete.
+
+The introspect endpoint checks the audience only since version 1.18.0. In previous versions applications need to check the audience themselves based on the aud-claim of the response received. 
+
+Look up in the ACL which roles are granted the required privilege(s) (read, write, ...) for a given resource (tenant + id + type + your application).
+If any of those roles is granted by the token, access is granted.
+
+
+Upon incoming request
+Validate token using the OpenID Connect Token Introspect Endpoint (see also RFC 7662 2.2.) which additionally returns the user's roles.
+Validate audience returned as defined in RFC 7519 4.1.3. If the claim is present, your service must be part of the audience list as that means that the token is intended for your service.
+Can be cached for some seconds/minutes using a hash derived from the token as key thereby getting rid of having to call the introspect endpoint on each incoming request.
+If more information about the user is needed than returned by the introspect endpoint, you may additionally call the OpenID Connect Userinfo Endpoint.
+Enrich authentication context with the information about the user received in 1. and 2., e.g. the user's roles.
+Match information from ACL with roles from the authentication context to make authorization decisions for the requested resources.
+Regularly request / update applications ACL
+Links:
+
+API Docs: http://nexeed-integration-qa.de.bosch.com/iam/doc/api/#operation/Read%20application's%20ACL
+Concept for Sharing via ACLs: Complex in depth look into sharing via ACLs
+
+
+4.3. Authorization descision in the UI (views, buttons)
+Request /userinfo to get the user's roles (currently they are still part of the ID-token, but that is about to change due to issues in the logout flow).
+Static resources: you can use the user ACL which contains static resource for all modules or use the same approach as for fine grained access / dynamic resources.
+Fine grained access / dynamic resources:
+Combine the user's roles with the information available in your application's ACL, that you already have in your backend. Bring that information to the UI, e.g. as part of your regular responses (e.g. a flag for each entity like "canEdit" ...) or with a dedicated request to a custom ACL endpoint.
+(warning) The user ACL does not work here as it will not contain dynamic resources.
+
+
+For Portal: use User-ACL to get cross-module information about user's grants on resources to decide on which navigation items to show.
+
+4.4. Resource and role registration
+Your application may register own resources and application roles at MACMA to be used for access management.
+
+A typical resource consists of a type, id, name and privileges (add, delete, execute, modify, read). They can be upserted (create or update depending on whether they already exist) and deleted. It is recommended to have general resources like "all machines" and some sensible predefined application roles with privileges on those general resources.
+
+Additionally you may add individual resources dynamically as well, for example when a new machine is added. Access privileges on those cannot be defined for application roles though. A specific machine exists only once owned by a single tenant, whereas general resources like "all machines" exist for every tenant your application has been shared to.
+
+5. Calling other APIs
+You want to access another application via service to service communication.
+
+5.1. You need
+An application in MACMA representing your solution
+A confidential client
+5.2. Call an API
+Prerequisites: sufficient privileges to call the API. The required roles have to be assigned to your application in the respective tenant in MACMA.
+
+Knowing your privileges
+
+Currently there is no automated way for applications define which role they require to work.
+
+There also is no standard way of defining which roles or permissions are required to use a specific functionality yet.
+
+This needs to be clearly documented and communicated when integrating with another service, so that the required role assignments can be made by operators or customers within their tenant / organization.
+
+For each application you want to contact (service2service), you need the
+
+the url of that service and
+the "single-audience" scope that is required to talk to that service service (see below). No other scopes are required, just sending the the "single-audience" scope in the parameter scope is enough.
+Both need to be run-time configurable as both will be different for each installation of your application / each environment! They will be the same in all tenants, so if you need to talk to two other clients/APIs, two environment variables for the "single-audience" scopes, one for each communication partner, are enough.
+
+
+
+Getting a token: use the client credentials you received for your confidential client to request a token from MACMA per tenant and per application using the client credentials flow of OAuth2.
+
+A specific scope has to be requested for a token, telling MACMA what the token will be used for. This scope should be configurable at runtime (not hardcoded) for your application and used as-is in the scope request parameter.
+
+An empty scope parameter will not be accepted when requesting a token, therefore make sure to not send an empty scope parameter.
+
+This is mandatory when MACMA enforces the use of single-audience tokens. There is a grace period where an application can opt-in, later this will be enforced for all applications.
+
+For operations: the parameter has to be "aud:<targetSystemClientId>", e.g. aud:xyz.
+
+6. User authentication via confidential client (typically with cookies)
+This is the approach to use when an application wants to use cookies set by the backend for the frontend. The browser will add the cookies to all request to your backend automatically. This makes file downloads and websocket connection easier but requires proper CSRF/XSRF protection.
+
+This approach matches current architecture decisions: 024 Usage of cookies to support single sign-on
+
+Make sure to have proper CSRF / XSRF protection in place due restrict usage of your authorization cookie!
+
+6.1. You need
+An application in MACMA representing your solution
+A confidential client
+with redirect URLs and web origin matching your host
+Example: when served from https://foo.bar.example/fizzbuzz → redirect URL similar to https://foo.bar.example/fizzbuzz/* and web origin https://foo.bar.example
+No public client needed
+Own domain or subdomain
+If you want to be part of the portal: integration via IFrame
+No own domain or subdomain? → discuss with operations and security advisors!
+
+Your CSRF protection is probably not secured from misuse by other applications on the same host!
+Other applications on the same host might be put at risk by vulnerabilities in your application.
+You have to namespace your cookie properly to avoid conflicts.
+Integration into portal without IFrame? → talk to operations and portal
+
+Your CSRF protection is probably not secured from misuse by other applications on the same host!
+Other applications on the same host are put at risk by XSS vulnerabilities in your application.
+Login flow may be problematic: the authorization code from the redirect will not reach your backend if you redirect to the portal's url after login, because it wil not be passed on by the portal to your application.
+Alternatively redirection to your backend after login followed by a subsequent redirect to the portal is likely to work. Once migrated to an IFrame, the subsequent redirection can just be turned off.
+Or you can try to grab the code from the portal's URL and send it to your backend explicitely to exchange it for a token. Once migrated to an IFrame, this will still work but introduced more delay and complexity than the pure redirection solution.
+
+
+ Analysis of implications
+6.2. Handle login
+Use OAuth2 Authorization Code Grant/Flow:
+
+Initialize the user login with your application's clientId (no clientSecret here! Never put clientSecret into user's browsers) by sending the user to the authorization server (redirect or popup) to the OAuth2 /authorize endpoint (/auth for Keycloak, see OpenID Configuration endpoint).
+After successful login, there will be a redirect back to your application including a authorization code.
+Call the OAuth2 /token endpoint to exchange the returned authorization code for a token in your backend. You can then put that token into a cookie which. To make the cookie secure:
+make it Secure and HttpOnly (see https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#restrict_access_to_cookies),
+do not set the domain attribute! Otherwise you will have security issues due to implicit wildcard scoping of your cookie,
+use the __Host prefix to enforce strict cookie scope ( Cookie Prefixes ) including secure and absence of domain attribute on supporting clients
+and restrict cookie usage with proper XSRF protection.
+If your application is not yet using the single audience token mode, the token will be missing your own client's client-id in the audience and thus will not be accepted by your client / API. New applications use single audience token mode by default, for legacy applications check your deployment scripts to turn on single audience token mode.
+
+
+
+For details on multitenancy and logout handling see User Login with Multitenancy in Public Clients like an Angular SPA.
+
+For details on blocking token misuse, see Block token misuse (in Cookies and Session Storage).
+
+Flowchart by CPM: Authentication and Authorization Process
+
+7. User authentication via public client (header and (session) storage)
+This is the approach used for SPAs (even without a backend for frontend), CLIs, apps and desktop application. The authorization header containing "Bearer <token>" must be added to all calls to the backend.
+
+This approach does not match current architecture decisions: 024 Usage of cookies to support single sign-on
+
+7.1. You need
+An application in MACMA representing your solution
+
+A public client
+with redirect URLs and web origin matching your host
+Example: when served from https://foo.bar.example/fizzbuzz → redirect URL similar to https://foo.bar.example/fizzbuzz/* and web origin https://foo.bar.example
+Own domain or subdomain
+If you want to be part of the portal: integration via IFrame
+No own domain or subdomain? → discuss with operations and security advisors!
+
+Your tokens are not secured from misuse by other applications on the same host!
+Other applications on the same host might be put at risk by vulnerabilities in your application.
+You have to namespace your values in the session storage properly to avoid conflicts.
+Integration into portal without IFrame? → talk to operations and portal!
+
+Other applications on the same host are put at risk by XSS vulnerabilities in your application.
+Session storage will be on the portal's origin. For implications see "no own domain or subdomain".
+
+
+ Analysis of implications
+7.2. How put the public client's id into the app
+MACMA randomly generates the client ids, thus an application will have different client ids on each environment. Hardcoding it into the application is therefore not a good idea. Therefore it is recommended to offer a public configuration endpoint from which the client (app, CLI, pure client side SPA...) can request configuration settings like its client id on a specific environment. So once the user selected the environment to use (in case of an CLI there might be multiple environments to interact with), the client can read its public client's id and use it to trigger the user login flow.
+
+7.3. Handle login
+Use OAuth2 Authorization Code Grant Flow with PKCE:
+
+Initialize the user login with your application's publicClientId (no clientSecret here!) by sending the user to the authorization server (redirect or popup) to the OAuth2 /authorize endpoint (/auth for Keycloak, see OpenID Configuration endpoint).
+After successful login, there will be a redirect back to your application including a authorization code.
+Call the OAuth2 /token endpoint to exchange the returned authorization for token using your publicClientId again (again not clientSecret here!) and use the returned access token for API calls and the returned id token for information like the user's name.
+For details on multitenancy and logout handling see User Login with Multitenancy in Public Clients like an Angular SPA and/or OAuth2 for Public Clients like Browser, Native and Desktop Applications
+
+For details on blocking token misuse, see Block token misuse (in Cookies and Session Storage).
+
+
+
+ An Example for nodered
+ An example for Postman
+7.4. Implementation
+We recommend using BCI Web Core Auth for your Angular application. It provides a MacmaAuthModule handling OAuth2 for you including multi-tenancy.
+
+This is how we use it:
+
+You might have the need to make the public client's clientId and the tenant ID / default realm configurable as well. This is not yet possible in BCI Web Core Auth - consider Contributing if https://dev.azure.com/bosch-bci/CoreDev/_workitems/edit/211869 is not resolved yet (status 18 Feb 2022).
+
+Usage of BCI Web Core Auth for login handling Expand source
+See also TM writeup on how to integrate into Nexeed IAS portal including IFrames and Oauth2 Login.
+
+8. Set of tenants owning resources of an application
+For use cases like loading master data, an application requires a list of relevant tenants. This list of tenants equals the set of tenants that owns any of the application's resources. This can easily be determined by collecting the values of the resource property owningTenantId from the application's ACL. There may be more tenants having access to resources due to data sharing where a tenant may gain access to another tenants resources (e.g. support use case), which are still owned by the providing tenant - thus the set of relevant tenants does not change in that case.
+
