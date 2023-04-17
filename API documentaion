@@ -1,0 +1,50 @@
+API to register modules at Nexeed Web Portal.
+
+Registration
+/api/core/api/v2/{tenantId}/registry/systems
+AUTHORIZATIONS:
+apiKeyoauth2
+ API Key: apiKey
+When using JW(T) token, use following format to pass the token as api key: bearer {token}"
+
+Header parameter name: Authorization
+ OAuth2: oauth2
+Uses Open ID Connect
+
+Flow type: password
+Token URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+Refresh URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+Flow type: clientCredentials
+Token URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+Refresh URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+Flow type: authorizationCode
+Authorization URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/auth
+Token URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+Refresh URL: <macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token
+PATH PARAMETERS
+tenantId
+required
+string or null
+REQUEST BODY SCHEMA: 
+application/json-patch+json
+application/json-patch+json
+name	
+string or null [ 0 .. 50 ] characters
+baseUrl	
+string or null <uri>
+vendor	
+string or null [ 0 .. 50 ] characters
+version	
+string or null [ 0 .. 50 ] characters
+supportedLanguages	
+Array of strings or null
+authProviderClientId	
+string or null [ 0 .. 255 ] characters
+registrationType	
+string (RegistrationType)
+Enum: "Api" "Manual"
+Responses
+201 Success
+400 Bad Request
+401 Unauthorized
+403 Forbidden
