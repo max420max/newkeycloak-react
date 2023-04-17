@@ -1,0 +1,235 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Registration API",
+    "description": "API to register modules at Nexeed Web Portal.",
+    "version": "v2"
+  },
+  "paths": {
+    "/api/core/api/v2/{tenantId}/registry/systems": {
+      "post": {
+        "tags": [
+          "Registration"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SCSParameter"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SCSParameter"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SCSParameter"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SCSParameter"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IScsRegistryInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IScsRegistryInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IScsRegistryInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SCSParameter": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "vendor": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "supportedLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "authProviderClientId": {
+            "maxLength": 255,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "registrationType": {
+            "$ref": "#/components/schemas/RegistrationType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IScsRegistryInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "vendor": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "hashedFrontendUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "supportedLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "authProviderClientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "registrationType": {
+            "$ref": "#/components/schemas/RegistrationType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegistrationType": {
+        "enum": [
+          "Api",
+          "Manual"
+        ],
+        "type": "string"
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "description": "When using JW(T) token, use following format to pass the token as api key: bearer {token}\"",
+        "name": "Authorization",
+        "in": "header"
+      },
+      "oauth2": {
+        "type": "oauth2",
+        "description": "Uses Open ID Connect",
+        "flows": {
+          "password": {
+            "authorizationUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/auth",
+            "tokenUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "refreshUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "scopes": { }
+          },
+          "clientCredentials": {
+            "authorizationUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/auth",
+            "tokenUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "refreshUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "scopes": { }
+          },
+          "authorizationCode": {
+            "authorizationUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/auth",
+            "tokenUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "refreshUrl": "<macma-base-url>/auth/realms/<tenant>/protocol/openid-connect/token",
+            "scopes": { }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "apiKey": [ ]
+    },
+    {
+      "oauth2": [ ]
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Nexeed Web Portal",
+      "tags": [
+        "/api/core/api/v2/{tenantId}/registry/systems",
+        "Registration"
+      ]
+    }
+  ]
+}
