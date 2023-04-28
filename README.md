@@ -23,3 +23,14 @@ Response samples
 
 text/plain
 No sample
+
+================================
+
+I uplodaed the documentaion "final_API_Doc"
+we need to develop below API's in backedn code :
+
+PUT : https://nxd-ias-opbase-d.si-d09.rb-dcs.bosch.com/registry/api/v1/registry/systems/gn1dgslqghq51j7er4tvlqf7o
+GET: https://jb-app.radium-depl-lab.bosch.com/portal-api/v1/info/
+GET: https://jb-app.radium-depl-lab.bosch.com/portal-api/v1/views/
+GET: https://jb-app.radium-depl-lab.bosch.com/portal-api/v1/docs?language=<lang> 
+
