@@ -1,0 +1,509 @@
+6.2. Automatic registration via API
+6.2.1. Prerequisites
+Web Portal's registration API requires authentication via MACMA. I.e. a valid MACMA access token is to be sent with the registration request
+The MACMA client used for the request has to have Web Portal's "Portal Registration" role assigned for authorization
+After the registration request, Web Portal will fetch data from the module APIs using a MACMA token (refer to the registration flow below). If the module APIs required authentication, it needs to be able to handle the MACMA token sent by Web Portal.
+6.2.2. Registration Flow
+To register, a PUT request is to be sent to Web Portal's registry. When authorized, Web Portal will start calling various APIs to be provided by the module based on the base URL which is given in the registration request. That means, Web Portal is pulling the information from the module's APIs directly, instead of the information being pushed to Web Portal.
+
+Refer to the back-end implementation guide chapter on this page for the APIs to provide to Web Portal.
+
+7. Technical Restrictions 
+The iframe integration has some technical restrictions due to the constraints browsers put on iframes.
+
+The sandbox attribute of the iframe is set to allow-same-origin allow-scripts allow-modals allow-forms allow-downloads allow-popups.
+
+
+
+7.1. Headers
+The view to be displayed in Web Portal's iframe needs to allow the same. There are two HTTP headers that might prevent this. If one of those headers is set to a restrictive value, the view cannot be loaded within an iframe.
+
+X-FRAME-OPTIONS - if set to DENY, the page cannot be loaded in an iframe. It could be set to ALLOW-FROM, but it is not supported by all browsers. Best option would be to not set it at all.
+Content-Security-Policy: frame-ancestors 'none' - if set, but Web Portal's domain is not in the whitelist, the page cannot be displayed in the iframe. If you need to set CSP, please allow Web Portal's domain.
+
+7.2. Modals/dialogs
+The content of the module's UI is limited by the iframe's size. Consider this when opening modals in the UI and apply a styling so that they are not cut and therefore would be unusable for the users.
+
+7.3. Communication with Web Portal
+The only way for the module's UI to communicate with Web Portal's frame is via the postMessage API. In order for the deep-linking, getting user settings (language etc.), messages, and more to work, Web Portal requires the module UI to implement a front-end API which is specified in UI API.
+
+7.4. Communication with other module's back-end API
+This is less a restriction of the iframe integration but a consequence of MACMA's single audience mode. One module UI cannot simply call another module's back-end API. Consider reading MACMA's documentation.
+
+7.5. Sanitizing IFrame URLs
+Every URL which is put into the "src" attribute of the <iframe> tag where your app is running inside, is getting sanitized by encodeURIComponent() or encodeURI().
+
+7.6. Popups
+Since allow-popups attribute is added to iFrame, module developers have possibility to use popups. With agreement with UI/US guild we recommend to follow Modal Windows - UI Guidelines when using them. 
+
+
+
+8. Back-end Implementation Guide
+8.1. Registration Request
+In order to register a module at Web Portal, it has to send a request to the Web Portal's registration API and provide an portal-api/v1/info endpoint (see below) that is called by Web Portal after the request is placed.
+
+ Portal Api used for registration
+ 
+ Method	
+PUT
+
+Resource path	
+<PORTAL_URL>/registry/api/v1/registry/systems/<id>
+Parameter	
+id (String): Unique identifier of the module which is by default the MACMA related clien id which is configured for the System.
+This has to be the same as provided by the info endpoint
+name (String): Name of the module.
+This has to be the same as provided by the info endpoint
+BCI applications refer to [NEXOPS] Application display names (SCS names and module configuration)
+baseUrl (String): Base URL under which the system is exposed
+Set it to the same as provided by the info endpoint
+authProviderClientId (String): The client id you receive from the IAS auth provider (usually MACMA)
+Authentication / Authorization	
+Bearer authentication
+
+Permissions needed:
+
+Add+Modify	api	system-registration
+(assigned to role Portal_Registration)
+
+Example call
+
+PUT http://nexeed-ias.de.bosch.com/registry/api/v1/registry/systems/macma
+{
+    "name": "Access Management",
+    "baseUrl": "http://nexeed-integration.de.bosch.com/iam"
+}
+
+
+Comments
+
+calling this interface twice with the same data will result in a replace of old data in the Module Registry. So no error is returned. An update of views is performed when there is a change in the info provided (e.g. version)
+the delivered information is persisted and will not be deleted
+deletion of a module from the Module registry can only be done by a System Admin role and a manual API call
+Example response
+
+201
+{
+}
+
+Response codes
+
+200 OK	Module exists in registry and was updated successfully
+201 Created	Module successfully registered
+400 Bad Request	E.g. validation unsuccessful or /info endpoint could not be reached
+401 Unauthorized	Invalid token sent with the request
+403 Forbidden	Permission to register system missing (see authorization info above)
+
+8.2. Module APIs
+There are APIs Web Portal will try to call on module-side after registration request. One of which is /info which is required to successfully finish registration.
+
+
+
+ draw.io
+
+Source page access restriction: Click the link below to check if the page is accessible.
+/confluence/display/NP1/Module+APIs+in+order+to+automatically+integrate+into+the+Portal+UI
+
+
+/info	Registration. Provides version information, for example.	Mandatory for registration and updates.
+/views	Entries in the navigation menu. Provides menu entries and the respective links to be displayed.	Mandatory if menu entries shall be displayed in the navigation menu.
+/documents	Document collection. Two types of documents are collected and displayed to the user currently: Open-source software disclosure documents and Public API documentation. 	Mandatory if disclosure documents or Public API Documentation shall be displayed.
+/context-contributions	Context Contribution. Flexible way to display data from other modules. Currently only contributions of type DATA can be provided. Refer to Context/Contribution Concept and Contexts Published Language for more information.	Mandatory if module wants to contribute to certain contexts.
+/widgets	
+Dashboard widgets. Provides widgets to be displayed in the widget catalog on the dashboard. 
+
+Mandatory if widgets shall be provided in the dashboard.
+info: REQUIRED 
+
+ Info endpoint
+Method	
+GET
+
+Resource path	
+<BASE_URL>/portal-api/v1/info
+Authentication	
+Bearer authentication
+
+Authorization	None - no resource/role access required
+Example response
+
+{
+    "id": "macma-related-client-id",
+    "authProviderClientId": "macma-related-client-id"
+    "name": "Error Statistics",
+    "vendor": "BCI",
+    "version": "1.0.0",
+    "baseUrl": "http://nexeed-integration.de.bosch.com/smc",
+    "supportedLanguages": ["de", "en"]
+}
+
+Response Schema
+
+id	
+Unique identifier of the module which is by default the MACMA related application ID which is configured for the system.
+
+It has the same requirements for naming as MACMA. So if no special characters are allowed, don't use them here.
+
+String(40)	(tick)
+name	
+Name of the module.
+
+Provided via product management: BCI module names (internal link)
+for 3rd parties, ask your product management team
+String(50)	(tick)
+vendor	Information of the vendor	String(50)	(tick)
+version	
+Module version
+
+Hint: the other infos (views etc.) are only updated if this info response changes, e.g. by changing the version.
+
+String(50)	(tick)
+baseUrl
+
+Base URL under which the system is exposed.
+
+Use the very same as in the PUT statement.
+
+URL	(tick)
+supportedLanguages	
+List of the supported languages. The i18n language keys have to apply the ISO 639-1 two letter codes.
+
+The supported languages will be displayed in the User Profile.
+
+Array of String	(tick)
+authProviderClientId	
+Was added later to the API. Used to provide the MACMA/AC3 ClientId if it's different from the "id". 
+
+It makes sense to use this field when you want to set a human-readable ID like "myModuleInstance123" then you have to give the MACMA clientId in this field.
+
+String	(error)
+views
+
+ Views endpoint
+The menu is part of the portfolio and therefore it's the responsibility of Portfolio Management to define how the menu is structured, named and communicated. Consider contacting Portfolio Management to align with the managed menu. Web Portal is not responsible for the configuration or contents of the menu.
+
+Although the resource ID and type properties are marked as not required in the Views API specification, an application needs to provide this information in order for Web Portal to apply authorization. If no resource ID/type is given, the menu entry will be displayed to all users regardless of permissions. 
+
+Method	
+GET
+
+Resource path	
+<BASE_URL>/portal-api/v1/views
+Authentication	Bearer authentication
+Authorization	None - no resource/role access required
+8.2.1. Group entry
+A group entry acts like a folder in the menu and can be added on the first level only. A group entry cannot open a view on click, therefore the JSON specification does not contain any information about HTML file, authorization etc.
+If a group entry does not contain any view entries on the second level, it will not be displayed. This is also true, if there are child entries but the user doesn't have permission to view at least one of them.
+
+If a module defines a group entry, it cannot be used by other modules to put their second level views in. This is because modules could not be deployed and the views of the other modules would not be displayed.
+
+If a group entry is to be shared between different modules (to add their views), it needs to be added to the Default Group Structure which is uploaded to Web Portal by an operator after deployment. There are different Default Group Structures for an IAS, MES or BMLP deployment.
+
+Example response for providing navigation group (1st level entry)
+
+
+
+{
+    "items": [
+        {
+            "title": "Equipment Availability",
+            "navigationPriority": 30,
+            "navigationPath": ["equipment-availability"],
+            "icon": "bosch-ic-core-data",
+            "localization": {
+                "title": {
+                    "de": "Fehleranalyse"
+                }
+            }
+        }
+    ]
+}
+Response Schema for providing navigation group (1st level entry)
+
+
+
+
+
+
+
+
+navigationPriority	A number that can be assigned to a menu item that controls the ordering of menu items. The position of the menu items must be aligned with Portfolio Management.	Number	(tick)	
+navigationPath	
+Path where the menu entry of the view is displayed in the Web Portal navigation.
+
+The navigation path acts like an ID for the menu's hierarchy.
+
+Examples:
+
+Register equipment as new top level menu
+[ "equipment" ]
+
+Array of Strings (150)	(tick)	
+icon	Image icon to represent the navigation group	String (50)	(tick)	
+localization	
+Provide further translations for properties on the same level e.g. title.
+
+Object	(error)	
+8.2.2. Navigation entry
+A navigation entry can be added on the first or second level in the menu. If it is added to the second level, a first level group entry must be defined in the navigationPath property as defined in the specification below.
+
+Example response for providing navigation view (1st or 2nd level entry)
+
+{
+    "items": [
+        {
+            "title": "Error Pareto",
+            "tags": ["Facility", "Events", "Bar Chart"],
+            "htmlFile": "/static/web-app/equipment-availability/error-pareto?tenantId=##tenantId##",
+            "resourceId": "macma-resource-id",
+            "resourceType": "view",
+            "navigationPriority": 30,
+            "navigationPath": ["equipment-availability", "error-pareto"],
+            "explicitLeaveEventing": false,
+            "localization": {
+                "title": {
+                    "de": "Fehleranalyse"
+                },
+                "tags": {
+                    "de": ["Einrichtung", "Ereignissse", "Balkendiagramm"]
+                }
+            },
+            "actions": {
+                "bci.cpm.createTicket": {
+                    "title": "Create Ticket",
+                    "contexts": ["device", "machineCode"],
+                    "localization": {
+                        "title": {
+                             "de": 'Ticket anlegen'
+                            }
+                    }
+                 },
+            }
+        }
+    ]
+}
+
+Response Schema
+
+Property	Description	Type	Required	Web Portal version
+title	Title of the view which will be displayed in the navigation. Additional translations for the title can be provided as part of the localization object	String (50)	(tick)	
+tags	Array of search terms the user might be looking for. will be used to filter menu entries in the global search form	Array of Strings (50)	(error)	
+htmlFile	
+Absolute or relative URL to HTML file or application route that will be loaded in the Web Portal iframe.
+
+If a relative URL is given, the path is appended to the base URL.
+
+Please consider that the naming htmlFile might be confusing if your web application is built with a JavaScript framework like Angular, React or similar. You need to provide the URL to the exact route of your web application. E.g. if the view's route in the web application is /web-app/tickets/ticket-overview, then provide this value in the htmlFile property instead of something like /web-app/index.html?path=tickets/ticket-overview or similar.
+
+We might change the property to a better fitting name in an upcoming version, but as it would be a breaking change, it will stay in this API version.
+
+Note on performance
+
+When users navigates via the menu, Portal will set the iframe's source to the respective URL of the selected menu entry. This forces the iframe to reload, meaning that even for switches between views of the same module the application will be bootstrapped again. Make sure to apply lazy loading to only load assets necessary for the current view.
+
+Modules can prevent this by using a hash (#) based routing strategy in their application. When only fragment changes, browser will not reload the iframe.
+
+Please consider that deep linking is currently not supported when providing a URL ending with an HTML, PHP or similar file, such as index.html and index.php.
+
+Tenant ID
+
+From Web Portal v4.9.0 on, it's possible to use "##tenantId##" as placeholder in the htmlFile value.
+
+At runtime, the placeholder will be replaced with the current tenant ID of the signed-in user.
+
+Example:
+
+{
+    "items": [
+        {
+            ...
+            "htmlFile": "/static/##tenantId##/web-app/some-view",
+            ...
+        }, //or
+        {
+            ...
+            "htmlFile": "/static/web-app/some-view?tenantId=##tenantId##",
+            ...
+        }
+    ]
+}
+String (500)	
+(tick)
+
+
+resourceId
+
+Related resource id which was configured in MACMA to assign ACL in order to restrict the visibility of the view to certain users	String (255)	(error)	
+resourceType	Resource type of the related MACMA configuration	String (255)	(error)	
+navigationPriority	A number that can be assigned to a menu item that controls the ordering of menu items. The position of the menu items must be aligned with Portfolio Management.	Number	(tick)	
+navigationPath	
+Path where the menu entry of the view is displayed in the Web Portal navigation.
+
+The navigation path acts like an ID for the menu's hierarchy.
+
+Although it is technically possible to add first level entries/groups, it is not advised if the group is shared with views from other Applications. Please get in contact with Portfolio Management in order to align. Here is a list of the current official IAS top level elements.
+
+Examples:
+
+Register new menu item equipment under the top level menu master-data
+[ "master-data", "equipment" ]
+
+
+
+Register tab properties under master-data → equipment
+Consider that the menu can only contain two levels and the third level is to be added as tabs on the view. Providing a third level is considered future proof as Web Portal might implement a tab control in future. Additionally, the menu is searchable and when providing third level entries, users are able to search for them as well.
+[ "master-data", "equipment", "properties" ]
+
+
+Register equipment as new top level menu
+[ "equipment" ]
+
+
+
+In the example the last entry represents the actual menu item to open the corresponding view.
+
+Array of Strings (150)	(tick)	
+navigationRoute DEPRECATED
+
+Route to open the corresponding view
+
+Required field till Portal version 5.0.x
+
+String (70)	(error)	
+showSettingsIcon DEPRECATED
+
+Whether a settings gear should be displayed next to the view title. See Custom Events used in the UI for more information. Default is false.
+
+Boolean	(error)	
+explicitLeaveEventing
+
+Defines whether a switch from an that view to another requires an explicity UI acknowledgement process. See also How to postpone / delay a switch to another view
+
+Default: false
+
+Boolean	(error)	
+localization	
+Provide further translations for properties on the same level e.g. title.
+
+Object	(error)	
+Context linking	
+
+
+actions	Provide actions for specific contexts in order to enable Context linking in front-end between modules/functionalities.	Object	(error)	
+
+
+actions.<key>	<key> that references your action. Respect the naming guideline <vendor>.<module>.<action name>, e.g. bci.cpm.process-view	String (255) : Object	(tick)	
+
+
+actions.<key>.title	Title displayed in the UI.	String (255)	(tick)	
+
+
+actions.<key>.contexts	Contexts where this action is added to. Refer to Contexts Published Language for available contexts.	Array of strings	(tick)	
+
+
+actions.<key>.localization	Provide further translations for properties on the same level e.g. title.	Object	(error)	
+
+
+
+
+
+
+docs
+
+ Docs endpoint
+This is currently only used to display Third Party License Information (Disclosure Documents) in the Web Portal UI. 
+
+Method	
+GET
+
+Resource path	
+<BASE_URL>/portal-api/v1/docs?language=<lang>
+Query Parameters	
+language allowing to filter documentation by specific language. If a document is not available in the given language the document with fallback language "en" is provided by the module in the same call
+Authentication	Bearer authentication
+Authorization	None - no resource/role access required
+Example Response
+
+{
+    "items": [
+        {
+            "url": "/static/disclosure-documentation-part1.html",
+            "language": "de",
+            "title": "PPM Disclosure Documentation (Administration)",
+            "format": "html",
+            "resourceId": "<module-defined macma-resource-id>",
+            "resourceType": "<module-defined macma-resource-type, e.g. "documents">",
+            "type": "disclosure-documentation"
+        },
+        {
+            "url": "/static/disclosure-documentation-part2.html",
+            "language": "de",
+            "title": "PPM Disclosure Documentation (Shopfloor Cycle)",
+            "format": "html",
+            "resourceId": "<module-defined macma-resource-id>",
+            "resourceType": "<module-defined macma-resource-type, e.g. "documents">",
+            "type": "disclosure-documentation"
+        }
+    ]
+}
+
+Response Schema
+
+type	
+Type of the document. The following types are known and will be considered by the Web Portal UI:
+
+api-documentation
+disclosure-documentation
+
+String	(tick)
+format	
+Document format. The following types are know and will be considered by the Web Portal UI:
+
+html
+pdf
+json
+yaml
+String	(tick)
+url	
+URL to access/download the related document. It may contain:
+
+a path to a document of given format
+a fully qualified URL to a document of given format
+For api-documentation type
+
+In case of api-documentation type, filename can not contain an '@' sign.
+You have to ensure that your file contains tags otherwise your documentation will be empty.
+filename has to be unique in entire provided /docs endpoint content. 
+ Example
+Portal will not prefix the endpoints in the OpenAPI spec file with the module's base URL. In order to display the correct URLs including a gateway context path or subdomain, modules need to prefix the endpoints themselves.
+
+String	(tick)
+language
+
+Document language in ISO 639-1 two letter codes.
+
+It it required from every module to provide every document-type at least in language "en" to provide a
+
+fallback option in case a document is not available in the requested language of a user.
+
+String	(tick)
+resourceId	Related resource id which was configured in MACMA to assign ACL in order to restrict the visibility of the document to certain users. Must be created by the module.	String(255)	(error)
+resourceType	Resource type of the related MACMA configuration. Must be created by the module.	String(255)	(error)
+title	The title of the document (to e.g. distinguish if multiple documents for one type are returned.	String(100)	(error)
+onPremiseOnly
+
+Whether a document should be displayed only for on premise installations only.
+
+Should be set to true for backend disclosure documents where their licenses don't require to be linked in the UI in a cloud environment.
+→ shown only on-premise
+Should be set to false for backend disclosure documents where their licenses require to be linked in the UI also in a cloud environment.
+→ shown on-premise and in cloud environments (distinction done by Web Portal configuration)
+Default is false, so that the document will always be shown.
+
+Boolean	(error)
+widgets
+
+ Widgets endpoint
+contexts-contributions
+
+ Context endpoint
