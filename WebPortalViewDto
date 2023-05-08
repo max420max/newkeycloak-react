@@ -1,0 +1,26 @@
+package com.bosch.jbapp.dto;
+
+import lombok.*;
+import com.fasterxml.jackson.annotation.*;
+import java.util.List;
+//import com.fasterxml.jackson.annotation.JsonInclude;
+
+@Builder
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
+public class WebPortalViewDto {
+	
+	private String title;
+    private String tags;
+    private String htmlFile;
+    private String resourceId;
+    private String resourceType;
+    private String icon;
+    private Long navigationPriority;
+    private List<String> navigationPath;
+  //  private LocalizationDto localization;
+
+}
