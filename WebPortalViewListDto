@@ -1,0 +1,26 @@
+package com.bosch.jbapp.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+
+public class WebPortalViewListDto {
+
+	private List<WebPortalViewDto> items;
+
+	public void setItems(List<WebPortalViewDto> items) {
+		this.items = items;
+	}
+
+	public List<WebPortalViewDto> getItems() {
+		return items;
+	}
+}
