@@ -1,0 +1,10 @@
+package com.bosch.jbapp.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.bosch.jbapp.model.WebPortalConfig;
+
+
+public interface WebPortalRepository extends JpaRepository<WebPortalConfig, String> {
+
+}
