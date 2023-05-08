@@ -1,0 +1,19 @@
+package com.bosch.jbapp.dto;
+
+
+
+import java.util.List;
+
+public class WebPortalDocumentListDto {
+	
+	private List<WebPortalDocumentDto> items;
+
+	public List<WebPortalDocumentDto> getItems() {
+		return items;
+	}
+
+	public void setItems(List<WebPortalDocumentDto> items) {
+		this.items = items;
+	}
+
+}
