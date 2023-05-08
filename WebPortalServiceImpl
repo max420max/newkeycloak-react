@@ -1,0 +1,81 @@
+package com.bosch.jbapp.service;
+
+import com.bosch.jbapp.dto.UserDto;
+import com.bosch.jbapp.dto.WebPortalDocumentDto;
+import com.bosch.jbapp.dto.WebPortalDocumentListDto;
+import com.bosch.jbapp.dto.WebPortalInfoDto;
+import com.bosch.jbapp.dto.WebPortalViewDto;
+import com.bosch.jbapp.dto.WebPortalViewListDto;
+import com.bosch.jbapp.model.User;
+import com.bosch.jbapp.repository.UserRepository;
+import com.bosch.jbapp.repository.WebPortalRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.*;
+
+public class WebPortalServiceImpl implements WebPortalService {
+	
+	private final WebPortalRepository repository;
+	
+	 public WebPortalServiceImpl(WebPortalRepository repository) {
+	        this.repository = repository;
+	    }
+	
+	@Override
+    public WebPortalInfoDto getInfo() {
+        //final String aud = getAudFromAuthorities();
+		return repository.findById()
+                .map(WebPortalInfoDto::new)
+                .orElseThrow(() -> new ResourceNotFoundException(WebPortalConfig.class, null));
+    }
+	
+	  @Override
+	    @SneakyThrows
+	    public WebPortalViewListDto getViews() {
+	        final String aud = getAudFromAuthorities();
+	        ObjectMapper objectMapper = new JsonMapper();
+	        BufferedReader reader = new BufferedReader(new InputStreamReader(viewConfigFileLocation.getInputStream()));
+	        List<WebPortalViewDto> items = new ArrayList<>(objectMapper.readValue(
+	                reader,
+	                new TypeReference<List<WebPortalViewDto>>() {
+	                }));
+	        //Temporary workaround
+	        items.forEach(item -> {
+	            if (item.getHtmlFile() != null) {
+	                item.setHtmlFile(item.getHtmlFile() + "?aud=" + aud);
+	            }
+	            Collections.replaceAll(item.getNavigationPath(), "JB-APP-dashboard", aud + "/JB-APP" +
+	                    "-dashboard");
+	        });
+
+	        return new WebPortalViewListDto(items);
+	    }
+	  
+	  @Override
+	    public WebPortalDocumentListDto getDocuments() {
+	        WebPortalDocumentDto webPortalDocumentDto = WebPortalDocumentDto.builder()
+	                .url(openSourceDocumentURL)
+	                .language("en")
+	                .title("JB-APP Disclosure Documentation")
+	                .format("html")
+	                .type("disclosure-documentation")
+	                .resourceType("documents")
+	                .build();
+
+	        return new WebPortalDocumentListDto(Collections.singletonList(webPortalDocumentDto));
+	    }
+
+}
