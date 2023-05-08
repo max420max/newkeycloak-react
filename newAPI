@@ -1,0 +1,326 @@
+package com.bosch.elwis.backend.controller;
+
+import com.bosch.elwis.backend.commons.util.measurement.LogDuration;
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalDocumentListDto;
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalInfoDto;
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalViewListDto;
+import com.bosch.elwis.backend.service.WebPortalService;
+import lombok.AllArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@AllArgsConstructor
+@RestController
+@RequestMapping("/portal-api/v1")
+public class WebPortalController {
+
+    private final WebPortalService service;
+
+    @GetMapping("/info")
+    @LogDuration
+    public WebPortalInfoDto getInfo() {
+        return service.getInfo();
+    }
+
+    @GetMapping(value = "/views")
+    @LogDuration
+    public WebPortalViewListDto getViews() {
+        return service.getViews();
+    }
+
+    @GetMapping(value = "/docs")
+    @LogDuration
+    public WebPortalDocumentListDto getDocuments() {
+        return service.getDocuments();
+    }
+}
+-------------------------------------------------------------
+
+package com.bosch.elwis.backend.model.dto.webportal;
+
+import com.bosch.elwis.backend.model.WebPortalConfig;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+@Builder
+@Getter
+@Setter
+@AllArgsConstructor
+public class WebPortalInfoDto {
+
+    private final String id;
+    private final String authProviderClientId;
+    private final String name;
+    private final String vendor;
+    private final String version;
+    private final String baseUrl;
+    private final List<String> supportedLanguages;
+
+    public WebPortalInfoDto(WebPortalConfig webPortalConfig) {
+        this.id = webPortalConfig.getId();
+        this.authProviderClientId = null; // not required
+        this.name = webPortalConfig.getName();
+        this.vendor = webPortalConfig.getVendor();
+        this.version = webPortalConfig.getVersion();
+        this.baseUrl = webPortalConfig.getBaseUrl();
+        this.supportedLanguages = Optional.ofNullable(webPortalConfig.getSupportedLanguages())
+                .map(s -> Arrays.asList(s.trim()
+                        .split(",")))
+                .orElse(null);
+    }
+
+}
+-----------------------------------------------
+package com.bosch.elwis.backend.model;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import javax.persistence.Entity;
+import javax.persistence.Id;
+
+@Getter
+@Setter
+@Entity
+public class WebPortalConfig {
+
+    @Id
+    private String id;
+    private String name;
+    private String vendor;
+    private String version;
+    private String baseUrl;
+    private String supportedLanguages;
+}
+
+
+------------------------------------------
+2.
+
+package com.bosch.elwis.backend.model.dto.webportal;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.List;
+
+@Getter
+@Setter
+@AllArgsConstructor
+public class WebPortalViewListDto {
+
+    private final List<WebPortalViewDto> items;
+
+}
+------------------------------------------------------
+package com.bosch.elwis.backend.model.dto.webportal;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.*;
+
+import java.util.List;
+
+@Builder
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
+public class WebPortalViewDto {
+
+    private String title;
+    private String tags;
+    private String htmlFile;
+    private String resourceId;
+    private String resourceType;
+    private String icon;
+    private Long navigationPriority;
+    private List<String> navigationPath;
+    private LocalizationDto localization;
+
+}
+--------------------------------
+3.
+package com.bosch.elwis.backend.model.dto.webportal;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.List;
+
+@Builder
+@Getter
+@Setter
+@AllArgsConstructor
+public class WebPortalDocumentListDto {
+
+    private final List<WebPortalDocumentDto> items;
+
+}
+
+------------------------------------
+package com.bosch.elwis.backend.model.dto.webportal;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Builder
+@Getter
+public class WebPortalDocumentDto {
+
+    private final String url;
+    private final String language;
+    private final String title;
+    private final String format;
+    private final String resourceId;
+    private final String resourceType;
+    private final String type;
+
+}
+-------------------------------------------------------------
+
+==========================================================================================================
+
+package com.bosch.elwis.backend.service;
+
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalDocumentListDto;
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalInfoDto;
+import com.bosch.elwis.backend.model.dto.webportal.WebPortalViewListDto;
+
+public interface WebPortalService {
+
+    WebPortalInfoDto getInfo();
+
+    WebPortalDocumentListDto getDocuments();
+
+    WebPortalViewListDto getViews();
+}
+
+
+=================================================
+
+package com.bosch.elwis.backend.service.impl;
+
+import com.bosch.elwis.backend.dao.WebPortalRepository;
+import com.bosch.elwis.backend.model.WebPortalConfig;
+import com.bosch.elwis.backend.model.dto.webportal.*;
+import com.bosch.elwis.backend.mtnancy.annotation.ForceDefaultSchema;
+import com.bosch.elwis.backend.service.WebPortalService;
+import com.bosch.elwis.backend.service.exception.ResourceNotFoundException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.*;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class WebPortalServiceImpl implements WebPortalService {
+
+    private final WebPortalRepository repository;
+
+    @Value("${elwis.ossa.url:}")
+    private String openSourceDocumentURL;
+
+    @Value("${elwis.portal.views-config-file-location:}")
+    private Resource viewConfigFileLocation;
+
+    @Override
+    @ForceDefaultSchema
+    public WebPortalInfoDto getInfo() {
+        final String aud = getAudFromAuthorities();
+
+        return repository.findById(aud)
+                .map(WebPortalInfoDto::new)
+                .orElseThrow(() -> new ResourceNotFoundException(WebPortalConfig.class, null));
+    }
+
+    @Override
+    public WebPortalDocumentListDto getDocuments() {
+        WebPortalDocumentDto webPortalDocumentDto = WebPortalDocumentDto.builder()
+                .url(openSourceDocumentURL)
+                .language("en")
+                .title("elWIs Disclosure Documentation")
+                .format("html")
+                .type("disclosure-documentation")
+                .resourceType("documents")
+                .build();
+
+        return new WebPortalDocumentListDto(Collections.singletonList(webPortalDocumentDto));
+    }
+
+    @Override
+    @SneakyThrows
+    public WebPortalViewListDto getViews() {
+        final String aud = getAudFromAuthorities();
+        ObjectMapper objectMapper = new JsonMapper();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(viewConfigFileLocation.getInputStream()));
+        List<WebPortalViewDto> items = new ArrayList<>(objectMapper.readValue(
+                reader,
+                new TypeReference<List<WebPortalViewDto>>() {
+                }));
+        //Temporary workaround
+        items.forEach(item -> {
+            if (item.getHtmlFile() != null) {
+                item.setHtmlFile(item.getHtmlFile() + "?aud=" + aud);
+            }
+            Collections.replaceAll(item.getNavigationPath(), "elwis-dashboard", aud + "/elwis" +
+                    "-dashboard");
+        });
+
+        return new WebPortalViewListDto(items);
+    }
+
+
+    //Temporary workaround
+    private String getAudFromAuthorities() {
+
+        Collection<? extends GrantedAuthority> grantedAuthorities =
+                Optional.ofNullable(SecurityContextHolder.getContext()
+                                .getAuthentication())
+                        .map(Authentication::getAuthorities)
+                        .orElseThrow(() -> new RuntimeException("no user ctx"));
+
+        Optional<? extends GrantedAuthority> scopeAud = grantedAuthorities.stream()
+                .filter(grantedAuthority -> grantedAuthority.getAuthority()
+                        .startsWith("SCOPE_aud"))
+                .findFirst();
+        return scopeAud.map(sa -> sa.getAuthority()
+                        .split(":")[1])
+                .orElse("1wt0a9qqz78kg1wj78l129pgib");
+    }
+}
+
+===========================
+package com.bosch.elwis.backend.dao;
+
+import com.bosch.elwis.backend.model.WebPortalConfig;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface WebPortalRepository extends JpaRepository<WebPortalConfig, String> {
+}
+--------------------------------
+
+
