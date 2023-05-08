@@ -1,0 +1,21 @@
+package com.bosch.jbapp.service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.bosch.jbapp.dto.UserDto;
+import com.bosch.jbapp.dto.WebPortalDocumentListDto;
+import com.bosch.jbapp.dto.WebPortalInfoDto;
+import com.bosch.jbapp.dto.WebPortalViewListDto;
+import com.bosch.jbapp.model.User;
+
+@Service
+public interface WebPortalService {
+
+	 	WebPortalInfoDto getInfo();
+
+	   WebPortalDocumentListDto getDocuments();
+
+	    WebPortalViewListDto getViews();
+}
