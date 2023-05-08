@@ -1,0 +1,246 @@
+PUT API 
+----------
+package com.bosch.procon.nexeed.operator.client;
+
+import org.springframework.web.bind.annotation.PutMapping;
+
+import com.bosch.procon.nexeed.operator.config.CustomFeignConfiguration;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationRequestDTO;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+
+import reactivefeign.spring.config.ReactiveFeignClient;
+import reactor.core.publisher.Mono;
+
+@ReactiveFeignClient(name = "nexeedApplicationRegistrationClient",
+    url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
+public interface NexeedApplicationRegistrationClient {
+    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+    Mono<ApplicationRegistrationResponseDTO> registerApplication(ApplicationRegistrationRequestDTO applicationRegistrationRequest);
+}
+--------------------------------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration.impl;
+
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
+import org.springframework.stereotype.Service;
+
+import com.bosch.procon.nexeed.operator.client.NexeedApplicationRegistrationClient;
+import com.bosch.procon.nexeed.operator.config.ApplicationProperties;
+import com.bosch.procon.nexeed.operator.config.NexeedProperties;
+import com.bosch.procon.nexeed.operator.exceptions.NexeedApplicationRegistrationException;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationRequestDTO;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedApplicationRegistration;
+
+import feign.FeignException;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NexeedApplicationRegistrationImpl implements NexeedApplicationRegistration {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationImpl.class);
+
+    private static final String APPLICATION_NAME_SEPARATOR = "-";
+    private static final String LOG_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration status: finished/failed - application-name:{} - error:{}";
+    private static final String LOG_ROLES_REGISTRATION_REQUEST_MSG = "Application registration status: started --> request: {}";
+    private static final String LOG_ROLES_REGISTRATION_RESPONSE_MSG = "Application registration status: started <-- response: {}";
+    private static final String EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration failed with error: {}";
+
+    private final NexeedApplicationRegistrationClient nexeedApplicationRegistrationClient;
+    private final NexeedProperties nexeedProperties;
+    private final ApplicationProperties applicationProperties;
+
+    public NexeedApplicationRegistrationImpl(NexeedProperties nexeedProperties,
+            ApplicationProperties applicationProperties,
+            NexeedApplicationRegistrationClient nexeedApplicationRegistrationClient) {
+        this.nexeedApplicationRegistrationClient = nexeedApplicationRegistrationClient;
+        this.nexeedProperties = nexeedProperties;
+        this.applicationProperties = applicationProperties;
+    }
+
+    @Override
+    public Mono<ApplicationRegistrationResponseDTO> registerApplication()
+            throws NexeedApplicationRegistrationException {
+        ApplicationRegistrationRequestDTO applicationRegistrationRequest = new ApplicationRegistrationRequestDTO(
+                getApplicationName(), nexeedProperties.getCallbackBaseUrl());
+        log.info("Application registration status: register - application-name:{}, callbackUrl:{}",
+                applicationRegistrationRequest.getName(),
+                applicationRegistrationRequest.getBaseUrl());
+        log.info(LOG_ROLES_REGISTRATION_REQUEST_MSG, applicationRegistrationRequest);
+
+        return nexeedApplicationRegistrationClient.registerApplication(applicationRegistrationRequest)
+            .doOnError(NoFallbackAvailableException.class, ex ->
+
+            Stream.of(ex.getSuppressed())
+                .filter(FeignException.class::isInstance)
+                .map(FeignException.class::cast)
+                .findFirst()
+                .ifPresent(e -> log.error(EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG, e.getMessage()))
+
+            )
+            .doOnSuccess(applicationRegistrationResponseDTO -> log.info(
+                    "Application registration status: success - application name:{} | id:{} | version:{}",
+                    applicationRegistrationResponseDTO.getName(),
+                    applicationRegistrationResponseDTO.getId(),
+                    applicationRegistrationResponseDTO.getVersion()));
+
+    }
+
+    private String getApplicationName() {
+        return nexeedProperties.getApplicationName()
+                + APPLICATION_NAME_SEPARATOR
+                + applicationProperties.getTenant().toLowerCase()
+                + APPLICATION_NAME_SEPARATOR
+                + applicationProperties.getPlant().toLowerCase();
+    }
+
+}
+--------------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.dto;
+
+import java.util.List;
+
+public class ApplicationRegistrationResponseDTO {
+    private String name;
+    private String id;
+    private String vendor;
+    private String version;
+    private String baseUrl;
+    private String hashedFrontendUrl;
+    private List<String> supportedLanguages;
+    private String authProviderClientId;
+    private String registrationType;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getVendor() {
+        return vendor;
+    }
+
+    public void setVendor(String vendor) {
+        this.vendor = vendor;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public String getHashedFrontendUrl() {
+        return hashedFrontendUrl;
+    }
+
+    public void setHashedFrontendUrl(String hashedFrontendUrl) {
+        this.hashedFrontendUrl = hashedFrontendUrl;
+    }
+
+    public List<String> getSupportedLanguages() {
+        return supportedLanguages;
+    }
+
+    public void setSupportedLanguages(List<String> supportedLanguages) {
+        this.supportedLanguages = supportedLanguages;
+    }
+
+    public String getAuthProviderClientId() {
+        return authProviderClientId;
+    }
+
+    public void setAuthProviderClientId(String authProviderClientId) {
+        this.authProviderClientId = authProviderClientId;
+    }
+
+    public String getRegistrationType() {
+        return registrationType;
+    }
+
+    public void setRegistrationType(String registrationType) {
+        this.registrationType = registrationType;
+    }
+
+    @Override
+    public String toString() {
+        return "ApplicationRegistrationResponseDTO [name=" + name + ", id=" + id + ", vendor=" + vendor + ", version="
+                + version + ", baseUrl=" + baseUrl + ", hashedFrontendUrl=" + hashedFrontendUrl
+                + ", supportedLanguages=" + supportedLanguages + ", authProviderClientId=" + authProviderClientId
+                + ", registrationType=" + registrationType + "]";
+    }
+
+}
+
+---------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.dto;
+
+public class ApplicationRegistrationRequestDTO {
+
+    private String name;
+    private String baseUrl;
+
+    public ApplicationRegistrationRequestDTO(String name, String baseUrl) {
+        this.name = name;
+        this.baseUrl = baseUrl;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    @Override
+    public String toString() {
+        return "ApplicationRegistrationRequestDTO [name=" + name + ", baseUrl=" + baseUrl + "]";
+    }
+
+}
+------------
