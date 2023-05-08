@@ -1,0 +1,81 @@
+package com.bosch.jbapp.controller;
+
+
+import com.bosch.jbapp.dto.WebPortalDocumentListDto;
+import com.bosch.jbapp.dto.WebPortalInfoDto;
+import com.bosch.jbapp.dto.WebPortalViewListDto;
+import com.bosch.jbapp.service.WebPortalService;
+
+import jakarta.annotation.security.RolesAllowed;
+
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * REST controller for handling the requests from Nexeed Portal
+ */
+
+@CrossOrigin(origins = {"*"})
+@RestController
+@RequestMapping("/portal-api/v1")
+
+public class WebPortalController {
+	
+	private final WebPortalService service;
+
+
+	    public WebPortalController(WebPortalService service) {
+	        this.service = service;
+	    }
+	
+	    //String url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
+
+	    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+	    
+	    
+	  /**
+     * GET /info : serves info parts which are needed for Nexeed to register an application correctly
+     *
+     * @param request
+     *            the HTTP request
+     * @return necessary info part for Nexeed application registration
+     */
+	 @GetMapping("/info")
+	 public WebPortalInfoDto getInfo() {
+	        //log.debug("Receive /info request from Nexeed for application registration");
+	        return service.getInfo();
+	    }
+
+
+	        
+	 /**
+	     * GET /views : serves view information parts which are needed for Nexeed to register an application correctly
+	     *
+	     * @param request
+	     *            the HTTP request
+	     * @return necessary view information parts for Nexeed application registration
+	     * @throws IOException 
+	     */
+	    @GetMapping("/views")
+	    public WebPortalViewListDto getViews() {
+	        return service.getViews();
+	    }
+	    
+	    /**
+	     * GET /docs : serves view information parts which are needed for third Party License Information (Disclosure Documents) in the Web Portal UI. 
+	     *
+	     * @param request
+	     *            the HTTP request
+	     * @return necessary docs information parts for Nexeed application registration
+	     * @throws IOException 
+	     */
+
+	    @GetMapping("/docs")
+	    public WebPortalDocumentListDto getDocuments() {
+	        return service.getDocuments();
+	    }
+}
