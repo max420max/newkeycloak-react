@@ -1,6 +1,7 @@
 package com.bosch.jbapp.controller;
 
 
+import com.bosch.jbapp.dto.ApplicationRegistrationDto;
 import com.bosch.jbapp.dto.WebPortalDocumentListDto;
 import com.bosch.jbapp.dto.WebPortalInfoDto;
 import com.bosch.jbapp.dto.WebPortalViewListDto;
@@ -32,10 +33,22 @@ public class WebPortalController {
 	        this.service = service;
 	    }
 	
-	    //String url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
-
-	    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+	    /**
+	     * PUT /info : serves info parts which are needed for Nexeed to register an application correctly
+	     *
+	     * @param request
+	     *            the HTTP request
+	     * @return necessary info part for Nexeed application registration
+	     */
 	    
+	    //String url = "${bmlp.nexeed.base-url}" //, configuration = CustomFeignConfiguration.class)
+	    String url = "bmlp.nexeed.base-url";
+	    
+	    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+	    public ApplicationRegistrationDto registerApplication() {
+	    	
+	    	return service.registerApplication();
+	    }
 	    
 	  /**
      * GET /info : serves info parts which are needed for Nexeed to register an application correctly
