@@ -1,13 +1,11 @@
 package com.bosch.jbapp.service;
 
-import com.bosch.jbapp.dto.UserDto;
 import com.bosch.jbapp.dto.WebPortalDocumentDto;
 import com.bosch.jbapp.dto.WebPortalDocumentListDto;
 import com.bosch.jbapp.dto.WebPortalInfoDto;
 import com.bosch.jbapp.dto.WebPortalViewDto;
 import com.bosch.jbapp.dto.WebPortalViewListDto;
-import com.bosch.jbapp.model.User;
-import com.bosch.jbapp.repository.UserRepository;
+import com.bosch.jbapp.model.WebPortalConfig;
 import com.bosch.jbapp.repository.WebPortalRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +24,9 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.*;
 
+@Service
+@RequiredArgsConstructor
+@Slf4j
 public class WebPortalServiceImpl implements WebPortalService {
 	
 	private final WebPortalRepository repository;
@@ -36,10 +37,11 @@ public class WebPortalServiceImpl implements WebPortalService {
 	
 	@Override
     public WebPortalInfoDto getInfo() {
-        //final String aud = getAudFromAuthorities();
-		return repository.findById()
+        final String aud = getAudFromAuthorities();
+		return repository.findById(aud)
                 .map(WebPortalInfoDto::new)
-                .orElseThrow(() -> new ResourceNotFoundException(WebPortalConfig.class, null));
+                .orElseThrow();
+               // .orElseThrow(() -> new ResourceNotFoundException(WebPortalConfig.class, null));
     }
 	
 	  @Override
@@ -77,5 +79,52 @@ public class WebPortalServiceImpl implements WebPortalService {
 
 	        return new WebPortalDocumentListDto(Collections.singletonList(webPortalDocumentDto));
 	    }
+	  
+	  @Override
+	  public ApplicationRegistrationDto registerApplication() {
+		  
+		  ApplicationRegistrationRequestDto applicationRegistrationRequest = new ApplicationRegistrationRequestDTO(
+				  getApplicationName(), nexeedProperties.getCallbackBaseUrl());
+		  return registerApplication(applicationRegistrationRequest)
+		            .doOnError(NoFallbackAvailableException.class, ex ->
 
+		            Stream.of(ex.getSuppressed())
+		                .filter(FeignException.class::isInstance)
+		                .map(FeignException.class::cast)
+		                .findFirst()
+		                .ifPresent(e -> log.error(EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG, e.getMessage()))
+
+		            )
+		            .doOnSuccess(applicationRegistrationResponseDto -> log.info(
+		                    "Application registration status: success - application name:{} | id:{} | version:{}",
+		                    applicationRegistrationResponseDto.getName(),
+		                    applicationRegistrationResponseDto.getId(),
+		                    applicationRegistrationResponseDto.getVersion()));
+	  }
+	  
+	  private String getApplicationName() {
+	        return nexeedProperties.getApplicationName()
+	                + APPLICATION_NAME_SEPARATOR
+	                + applicationProperties.getTenant().toLowerCase()
+	                + APPLICATION_NAME_SEPARATOR
+	                + applicationProperties.getPlant().toLowerCase();
+	    }
+
+	//Temporary workaround
+	    private String getAudFromAuthorities() {
+
+	        Collection<? extends GrantedAuthority> grantedAuthorities =
+	                Optional.ofNullable(SecurityContextHolder.getContext()
+	                                .getAuthentication())
+	                        .map(Authentication::getAuthorities)
+	                        .orElseThrow(() -> new RuntimeException("no user ctx"));
+
+	        Optional<? extends GrantedAuthority> scopeAud = grantedAuthorities.stream()
+	                .filter(grantedAuthority -> grantedAuthority.getAuthority()
+	                        .startsWith("SCOPE_aud"))
+	                .findFirst();
+	        return scopeAud.map(sa -> sa.getAuthority()
+	                        .split(":")[1])
+	                .orElse("1wt0a9qqz78kg1wj78l129pgib");
+	    }
 }
