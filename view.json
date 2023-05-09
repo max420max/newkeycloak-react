@@ -1,0 +1,70 @@
+[
+  {
+    "title":"elWIs",
+    "icon":"icon-desktop",
+    "navigationPriority":10,
+    "navigationPath":[
+      "elwis-dashboard"
+    ],
+    "localization":{
+      "title":{
+        "en":"elwis Dashboard",
+        "de":"elwis Armaturenbrett"
+      }
+    }
+  },
+  {
+    "title":"Dashboard",
+    "htmlFile":"/Dashboard",
+    "resourceId":"dafdd949-80c3-459a-b94c-5d6398840e07",
+    "resourceType":"view",
+    "icon":"icon-desktop",
+    "navigationPriority":20,
+    "navigationPath":[
+      "elwis-dashboard",
+      "dashboard"
+    ],
+    "localization":{
+      "title":{
+        "en":"Dashboard",
+        "de":"Dashboard"
+      },
+      "tags":{
+        "en":[
+          "Dashboard"
+        ],
+        "de":[
+          "Armaturenbrett"
+        ]
+      }
+    }
+  },
+  {
+    "title":"WorkersAssignment",
+    "htmlFile":"/WorkersAssignment",
+    "resourceId":"dafdd949-80c3-459a-b94c-5d6398840e07",
+    "resourceType":"view",
+    "icon":"icon-user-service",
+    "navigationPriority":30,
+    "navigationPath":[
+      "elwis-dashboard",
+      "workers-assignment"
+    ],
+    "localization":{
+      "title":{
+        "en":"Workers Assignment",
+        "de":"ArbeiterAuftrag"
+      },
+      "tags":{
+        "en":[
+          "Workers Assignment"
+        ],
+        "de":[
+          "ArbeiterAuftrag",
+          "ArbeitnehmerAuftrag",
+          "ArbeiterZuweisung"
+        ]
+      }
+    }
+  }
+]
