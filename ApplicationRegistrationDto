@@ -1,0 +1,97 @@
+package com.bosch.jbapp.dto;
+
+import java.util.List;
+
+public class ApplicationRegistrationDto {
+	
+	 private String name;
+	    private String id;
+	    private String vendor;
+	    private String version;
+	    private String baseUrl;
+	    private String hashedFrontendUrl;
+	    private List<String> supportedLanguages;
+	    private String authProviderClientId;
+	    private String registrationType;
+
+	    public String getName() {
+	        return name;
+	    }
+
+	    public void setName(String name) {
+	        this.name = name;
+	    }
+
+	    public String getId() {
+	        return id;
+	    }
+
+	    public void setId(String id) {
+	        this.id = id;
+	    }
+
+	    public String getVendor() {
+	        return vendor;
+	    }
+
+	    public void setVendor(String vendor) {
+	        this.vendor = vendor;
+	    }
+
+	    public String getVersion() {
+	        return version;
+	    }
+
+	    public void setVersion(String version) {
+	        this.version = version;
+	    }
+
+	    public String getBaseUrl() {
+	        return baseUrl;
+	    }
+
+	    public void setBaseUrl(String baseUrl) {
+	        this.baseUrl = baseUrl;
+	    }
+
+	    public String getHashedFrontendUrl() {
+	        return hashedFrontendUrl;
+	    }
+
+	    public void setHashedFrontendUrl(String hashedFrontendUrl) {
+	        this.hashedFrontendUrl = hashedFrontendUrl;
+	    }
+
+	    public List<String> getSupportedLanguages() {
+	        return supportedLanguages;
+	    }
+
+	    public void setSupportedLanguages(List<String> supportedLanguages) {
+	        this.supportedLanguages = supportedLanguages;
+	    }
+
+	    public String getAuthProviderClientId() {
+	        return authProviderClientId;
+	    }
+
+	    public void setAuthProviderClientId(String authProviderClientId) {
+	        this.authProviderClientId = authProviderClientId;
+	    }
+
+	    public String getRegistrationType() {
+	        return registrationType;
+	    }
+
+	    public void setRegistrationType(String registrationType) {
+	        this.registrationType = registrationType;
+	    }
+
+	    @Override
+	    public String toString() {
+	        return "ApplicationRegistrationResponseDTO [name=" + name + ", id=" + id + ", vendor=" + vendor + ", version="
+	                + version + ", baseUrl=" + baseUrl + ", hashedFrontendUrl=" + hashedFrontendUrl
+	                + ", supportedLanguages=" + supportedLanguages + ", authProviderClientId=" + authProviderClientId
+	                + ", registrationType=" + registrationType + "]";
+	    }
+
+}
