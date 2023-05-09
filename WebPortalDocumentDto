@@ -1,8 +1,6 @@
 package com.bosch.jbapp.dto;
 
 
-
-
 public class WebPortalDocumentDto {
 	
 	 private String url;
