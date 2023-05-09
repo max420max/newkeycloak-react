@@ -1,7 +1,20 @@
 package com.bosch.jbapp.dto;
 
-import java.util.List;
+import com.bosch.jbapp.model.WebPortalConfig;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+@Builder
+@Getter
+@Setter
+@AllArgsConstructor
 public class WebPortalInfoDto {
 	
 	String id;
@@ -11,51 +24,16 @@ public class WebPortalInfoDto {
     String baseUrl;
     List<String> supportedLanguages;
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getVendor() {
-        return vendor;
-    }
-
-    public void setVendor(String vendor) {
-        this.vendor = vendor;
-    }
-
-    public String getVersion() {
-        return version;
-    }
-
-    public void setVersion(String version) {
-        this.version = version;
-    }
-
-    public String getBaseUrl() {
-        return baseUrl;
-    }
-
-    public void setBaseUrl(String baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-
-    public List<String> getSupportedLanguages() {
-        return supportedLanguages;
-    }
-
-    public void setSupportedLanguages(List<String> supportedLanguages) {
-        this.supportedLanguages = supportedLanguages;
+    public WebPortalInfoDto(WebPortalConfig webPortalConfig) {
+        this.id = webPortalConfig.getId();
+       // this.authProviderClientId = null; // not required
+        this.name = webPortalConfig.getName();
+        this.vendor = webPortalConfig.getVendor();
+        this.version = webPortalConfig.getVersion();
+        this.baseUrl = webPortalConfig.getBaseUrl();
+        this.supportedLanguages = Optional.ofNullable(webPortalConfig.getSupportedLanguages())
+                .map(s -> Arrays.asList(s.trim()
+                        .split(",")))
+                .orElse(null);
     }
 }
