@@ -1,0 +1,110 @@
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.config;
+
+import java.util.List;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@ConfigurationProperties("bmlp.nexeed")
+@Component
+public class NexeedProperties {
+
+    private String baseUrl;
+    private String tenantId;
+    private String applicationId;
+    private String callbackBaseUrl;
+    private String applicationName;
+    private List<String> jwtAudience;
+    /**
+     * for quick debugging set it to <path-to-project>/src/main/resources/menu folder
+     */
+    private String menuConfigLocation;
+    private int navigationPriority;
+    private long waitProbesInSeconds;
+    private String cronReregister;
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getApplicationId() {
+        return applicationId;
+    }
+
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
+    }
+
+    public String getCallbackBaseUrl() {
+        return callbackBaseUrl;
+    }
+
+    public void setCallbackBaseUrl(String callbackBaseUrl) {
+        this.callbackBaseUrl = callbackBaseUrl;
+    }
+
+    public String getApplicationName() {
+        return applicationName;
+    }
+
+    public void setApplicationName(String applicationName) {
+        this.applicationName = applicationName;
+    }
+
+    public List<String> getJwtAudience() {
+        return jwtAudience;
+    }
+
+    public void setJwtAudience(List<String> jwtAudience) {
+        this.jwtAudience = jwtAudience;
+    }
+
+    public String getMenuConfigLocation() {
+        return menuConfigLocation;
+    }
+
+    public void setMenuConfigLocation(String menuConfigLocation) {
+        this.menuConfigLocation = menuConfigLocation;
+    }
+
+    public int getNavigationPriority() {
+        return navigationPriority;
+    }
+
+    public void setNavigationPriority(int navigationPriority) {
+        this.navigationPriority = navigationPriority;
+    }
+
+    public long getWaitProbesInSeconds() {
+        return waitProbesInSeconds;
+    }
+
+    public void setWaitProbesInSeconds(long waitProbesInSeconds) {
+        this.waitProbesInSeconds = waitProbesInSeconds;
+    }
+
+    public String getCronReregister() {
+        return cronReregister;
+    }
+
+    public void setCronReregister(String cronReregister) {
+        this.cronReregister = cronReregister;
+    }
+
+}
