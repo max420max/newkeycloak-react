@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: JB_APP
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://nxd-ias-opbase-d.si-d09.rb-dcs.bosch.com/iam/auth/realms/e8755e6d-c0b8-469e-88be-9c64c00258e9
+          jwk-set-uri: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs #http://localhost:8080/auth/realms/registration/protocol/openid-connect/certs 
+
+jwt:
+  auth:
+    converter:
+      resource-id: e8755e6d-c0b8-469e-88be-9c64c00258e9-jb-app
+      principal-attribute: preferred_username #client will extract the value of this field from the access token
+      
+keycloak:
+  realm: e8755e6d-c0b8-469e-88be-9c64c00258e9
+  #auth-server-url: http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:8180}/auth
+  ssl-required: external
+  resource: e8755e6d-c0b8-469e-88be-9c64c00258e9-jb-app
+  use-resource-role-mappings: false
+  bearer-only: true
+  public-client: true
+  
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    org.jgroups: INFO
+    org.infinispan: INFO
+    org.keycloak: DEBUG
+    org.keycloak.services.managers.DefaultBruteForceProtector: DEBUG
+    org.keycloak.services.scheduled.ClusterAwareScheduledTaskRunner: DEBUG
+    org.keycloak.services.managers.UserSessionManager: DEBUG
+    org.keycloak.timer.basic: DEBUG
+
+#server:
+  #port: '9090'
+  #servlet:
+    #context-path: /api
