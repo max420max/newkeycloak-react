@@ -1,0 +1,89 @@
+package com.bosch.procon.nexeed.operator.config;
+
+import java.util.List;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * Properties specific to Procon Nexeed Operator.
+ * <p>
+ * Properties are configured in the {@code application.yml} file. See {@link tech.jhipster.config.JHipsterProperties}
+ * for a good example.
+ */
+@ConfigurationProperties(prefix = "application", ignoreUnknownFields = false)
+public class ApplicationProperties {
+
+    private String tenant;
+    private String plant;
+    private String rolePrefixFormat = "%s_%s";
+    private String macmaRolePrefix = "URN";
+    private String vendor;
+    private List<String> supportedLanguages;
+    private String serviceBaseUrl;
+    private long feignTimeoutSeconds;
+
+    public String getTenant() {
+        return tenant;
+    }
+
+    public void setTenant(String tenant) {
+        this.tenant = tenant;
+    }
+
+    public String getPlant() {
+        return plant;
+    }
+
+    public void setPlant(String plant) {
+        this.plant = plant;
+    }
+
+    public String getRolePrefixFormat() {
+        return rolePrefixFormat;
+    }
+
+    public void setRolePrefixFormat(String rolePrefixFormat) {
+        this.rolePrefixFormat = rolePrefixFormat;
+    }
+
+    public String getMacmaRolePrefix() {
+        return macmaRolePrefix;
+    }
+
+    public void setMacmaRolePrefix(String macmaRolePrefix) {
+        this.macmaRolePrefix = macmaRolePrefix;
+    }
+
+    public String getVendor() {
+        return vendor;
+    }
+
+    public void setVendor(String vendor) {
+        this.vendor = vendor;
+    }
+
+    public List<String> getSupportedLanguages() {
+        return supportedLanguages;
+    }
+
+    public void setSupportedLanguages(List<String> supportedLanguages) {
+        this.supportedLanguages = supportedLanguages;
+    }
+
+    public String getServiceBaseUrl() {
+        return serviceBaseUrl;
+    }
+
+    public void setServiceBaseUrl(String serviceBaseUrl) {
+        this.serviceBaseUrl = serviceBaseUrl;
+    }
+
+    public long getFeignTimeoutSeconds() {
+        return feignTimeoutSeconds;
+    }
+
+    public void setFeignTimeoutSeconds(long feignTimeoutSeconds) {
+        this.feignTimeoutSeconds = feignTimeoutSeconds;
+    }
+
+}
