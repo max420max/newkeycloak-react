@@ -1,0 +1,601 @@
+package com.bosch.jbapp.controller;
+
+
+import com.bosch.jbapp.dto.UserDto;
+import com.bosch.jbapp.model.User;
+import com.bosch.jbapp.service.UserService;
+
+import jakarta.annotation.security.RolesAllowed;
+
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/*
+* http://127.0.0.1:5500/ This Url will be FRONTEND URL
+* */
+//@CrossOrigin(origins = "http://127.0.0.1:5500/"
+//@CrossOrigin(origins = "*", allowedHeaders = "*")
+@CrossOrigin(origins = {"*"})
+@RestController
+@RequestMapping(value = "/rest")
+public class UserController {
+
+    public static final String CREATE_USER = "/create/user";
+    public static final String DELETE_USER = "/delete/user/{id}";
+    private static final String GET_ALL_USER = "/getAllUser";
+    private static final String GET_TEST = "/test";
+    
+    //public static final String REGISTER_TO_NEXEED = "/registry/api/v1/registry/systems/${id}";
+    private UserService userService;
+
+
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+    
+    //	this method can be accessed by user whose role is admin
+    
+    //@RolesAllowed({"user","admin"}) -- if allow both permission
+    
+    @PostMapping(value = CREATE_USER)
+    @RolesAllowed("admin")
+    public ResponseEntity<String> createUser(@RequestBody UserDto userDto) throws Exception {
+    	System.out.println("insdie the  createUser method ::");
+        try {
+            return new ResponseEntity<>(userService.createUser(userDto), HttpStatusCode.valueOf(200));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    //	this method can be accessed by user whose role is admin
+    
+    @DeleteMapping(value = DELETE_USER)
+    @RolesAllowed("admin")
+    public ResponseEntity<Long> deleteUser(@PathVariable("id") Long id){
+        return new ResponseEntity<>(userService.deleteUser(id),HttpStatusCode.valueOf(200));
+    }
+
+    //	this method can be accessed by user whose role is admin/user
+    
+    @GetMapping(value =  GET_ALL_USER)
+    @RolesAllowed("user")
+    public ResponseEntity<List<User>> getAllUser(){
+    	System.out.println("INSIDE the ....getAllUser ");
+        return new ResponseEntity<>(userService.getAllUser(),HttpStatusCode.valueOf(200));
+    }
+    
+    //	this is Test API
+    
+    @GetMapping(value =  GET_TEST)
+    public ResponseEntity<String> getAnonymous() {
+        return ResponseEntity.ok("Hello this is Test API");
+    }
+
+}
+
+
+
+====================================
+package com.bosch.jbapp.controller;
+
+
+import com.bosch.jbapp.dto.WebPortalDocumentListDto;
+import com.bosch.jbapp.dto.WebPortalInfoDto;
+import com.bosch.jbapp.dto.WebPortalViewListDto;
+import com.bosch.jbapp.service.WebPortalService;
+
+import jakarta.annotation.security.RolesAllowed;
+
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * REST controller for handling the requests from Nexeed Portal
+ */
+
+@CrossOrigin(origins = {"*"})
+@RestController
+@RequestMapping("/portal-api/v1")
+
+public class WebPortalController {
+	
+	private final WebPortalService service;
+
+
+	    public WebPortalController(WebPortalService service) {
+	        this.service = service;
+	    }
+	    
+	    @GetMapping("/info")
+	   // @RolesAllowed("user")
+//	    @LogDuration
+	    public WebPortalInfoDto getInfo() {
+	        return service.getInfo();
+	    }
+
+	    @GetMapping(value = "/views")
+	    //@RolesAllowed("user")
+//	    @LogDuration
+	    public WebPortalViewListDto getViews() throws IOException {
+	        return service.getViews();
+	    }
+	    
+	    @GetMapping(value = "/docs")
+	    //@RolesAllowed("user")
+//	    @LogDuration
+	    public WebPortalDocumentListDto getDocuments() {
+	        return service.getDocuments();
+	    }
+	    
+//		this is Test OB API
+	    
+	    @GetMapping(value =  "/testOB")
+	    public ResponseEntity<String> getAnonymous() {
+	        return ResponseEntity.ok("Hello this is Test Operating Base  API");
+	    }
+	   
+}
+
+===========================
+
+package com.bosch.jbapp.exception;
+
+public class ResourceNotFoundException extends RuntimeException {
+	
+	public ResourceNotFoundException(String message) {
+        super(message);
+    }
+
+    public ResourceNotFoundException(Class<?> resourceClass, Object id) {
+        super(String.format("Resource of type: %s with id: %s not found", resourceClass.getSimpleName(), id));
+    }
+
+}
+=======================================================
+package com.bosch.jbapp.security;
+
+
+import org.keycloak.adapters.springsecurity.KeycloakConfiguration;
+import org.keycloak.adapters.springsecurity.authentication.KeycloakAuthenticationProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.access.annotation.Secured;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.mapping.SimpleAuthorityMapper;
+import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
+import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+
+@Configuration
+@EnableWebSecurity
+@KeycloakConfiguration
+@EnableMethodSecurity(prePostEnabled = true
+,securedEnabled = true, 
+jsr250Enabled = true,
+proxyTargetClass = true
+		)
+
+
+public class WebSecurityConfig {	
+
+	public static final String ADMIN = "admin";
+	public static final String USER = "user";
+	public final JwtAuthConverter jwtAuthConverter ;
+
+
+	public WebSecurityConfig(JwtAuthConverter jwtAuthConverter) {
+		this.jwtAuthConverter = jwtAuthConverter;
+	}
+	@Bean
+	protected SessionAuthenticationStrategy sessionAuthenticationStrategy() {
+		return new NullAuthenticatedSessionStrategy();
+	}
+
+
+
+	@Bean
+	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+		System.out.println("SecurityFilterChain:::111::::" +http.authorizeHttpRequests().requestMatchers(HttpMethod.GET, "/rest/getAllUser", "/rest/getAllUser/**").hasRole(USER));
+		http.cors();
+		http.authorizeHttpRequests()
+		.requestMatchers(HttpMethod.POST, "/rest/create/user", "/rest/create/user/**" ).hasRole(ADMIN)
+		.requestMatchers(HttpMethod.DELETE, "/rest/delete", "/rest/delete/**").hasRole(ADMIN)
+		.requestMatchers(HttpMethod.GET, "/rest/getAllUser", "/rest/getAllUser/**").hasRole(USER)   //.permitAll();
+		.requestMatchers(HttpMethod.GET, "/rest/test", "/rest/test/**").permitAll()
+
+		//Registration process  into nexeed portal
+		.requestMatchers(HttpMethod.PUT, "/registry/api/v1/registry/systems/${id}", "/registry/api/v1/registry/systems/${id}**").hasRole(USER)
+		.requestMatchers(HttpMethod.GET, "/portal-api/v1/info", "/portal-api/v1/info**").permitAll() //.hasRole(USER)
+		.requestMatchers(HttpMethod.GET, "/portal-api/v1/views", "/portal-api/v1/views**").permitAll()//.hasRole(USER)
+		.requestMatchers(HttpMethod.GET, "/portal-api/v1/docs?language=<lang>", "/portal-api/v1/docs?language=<lang>**").permitAll()//.hasRole(USER)
+		.requestMatchers(HttpMethod.GET, "/portal-api/v1/testOB", "/portal-api/v1/testOB**").permitAll();
+
+
+		System.out.println("SecurityFilterChain:::::::" +http.authorizeHttpRequests().requestMatchers(HttpMethod.GET, "/rest/getAllUser", "/rest/getAllUser/**").hasRole(USER));
+		http.oauth2ResourceServer()
+		.jwt()
+		.jwtAuthenticationConverter(jwtAuthConverter);
+		http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+		return http.build();
+	}
+
+
+}
+===================================================================
+package com.bosch.jbapp.service;
+
+
+
+import com.bosch.jbapp.dto.*;
+import com.bosch.jbapp.exception.ResourceNotFoundException;
+import com.bosch.jbapp.model.WebPortalConfig;
+import com.bosch.jbapp.repository.WebPortalRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+
+import lombok.Builder;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.*;
+import java.util.stream.Stream;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+
+
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class WebPortalServiceImpl implements WebPortalService{
+
+	private final WebPortalRepository repository;
+
+    //@Value("${elwis.ossa.url:}")
+    private String openSourceDocumentURL;
+
+    //@Value("${elwis.portal.views-config-file-location:}")
+    private Resource viewConfigFileLocation;
+
+    private static final String APPLICATION_NAME_SEPARATOR = "-";
+    private static final String LOG_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration status: finished/failed - application-name:{} - error:{}";
+    private static final String LOG_ROLES_REGISTRATION_REQUEST_MSG = "Application registration status: started --> request: {}";
+    private static final String LOG_ROLES_REGISTRATION_RESPONSE_MSG = "Application registration status: started <-- response: {}";
+    private static final String EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration failed with error: {}";
+    
+
+    @Override
+    public WebPortalInfoDto getInfo() {
+    	System.out.println("inside the WebPortalServiceImpl->getInfo()  ");
+        final String aud = getAudFromAuthorities();
+      
+        return repository.findById(aud)
+                .map(WebPortalInfoDto::new)
+                .orElseThrow(() -> new ResourceNotFoundException(WebPortalConfig.class, null));
+    }
+
+    @Override
+    @SneakyThrows
+    public WebPortalViewListDto getViews() throws IOException {
+        final String aud = getAudFromAuthorities();
+        ObjectMapper objectMapper = new JsonMapper();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(viewConfigFileLocation.getInputStream()));
+        List<WebPortalViewDto> items = new ArrayList<>(objectMapper.readValue(
+                reader,
+                new TypeReference<List<WebPortalViewDto>>() {
+                }));
+       //Temporary workaround
+        items.forEach(item -> {
+            if (item.getHtmlFile() != null) {
+                item.setHtmlFile(item.getHtmlFile() + "?aud=" + aud);
+            }
+            Collections.replaceAll(item.getNavigationPath(), "JB-APP-dashboard", aud + "/JB-APP" +
+                    "-dashboard");
+        });
+
+        return new WebPortalViewListDto(items);
+    }
+    
+    @Override
+    public WebPortalDocumentListDto getDocuments() {
+        WebPortalDocumentDto webPortalDocumentDto = WebPortalDocumentDto.builder()
+                .url(openSourceDocumentURL)
+                .language("en")
+                .title("JB-APP Disclosure Documentation")
+                .format("html")
+                .type("disclosure-documentation")
+                .resourceType("documents")
+                .build();
+
+        return new WebPortalDocumentListDto(Collections.singletonList(webPortalDocumentDto));
+    }
+
+
+    //Temporary workaround
+    private String getAudFromAuthorities() {
+
+        Collection<? extends GrantedAuthority> grantedAuthorities =
+                Optional.ofNullable(SecurityContextHolder.getContext()
+                                .getAuthentication())
+                        .map(Authentication::getAuthorities)
+                        .orElseThrow(() -> new RuntimeException("no user ctx"));
+
+        Optional<? extends GrantedAuthority> scopeAud = grantedAuthorities.stream()
+                .filter(grantedAuthority -> grantedAuthority.getAuthority()
+                        .startsWith("SCOPE_aud"))
+                .findFirst();
+        return scopeAud.map(sa -> sa.getAuthority()
+                        .split(":")[1])
+                .orElse("e8755e6d-c0b8-469e-88be-9c64c00258e9");
+    }
+}
+
+
+==================================================
+pom.xml
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.0.2</version>
+		<relativePath /> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.crud</groupId>
+	<artifactId>CrudOperation</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>CrudOperation</name>
+	<description>Demo project for Spring Boot</description>
+	<properties>
+		<java.version>17</java.version>
+		<keycloak.version>15.0.2</keycloak.version>
+		<spring-cloud.version>2020.0.5</spring-cloud.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-configuration-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>com.mysql</groupId>
+			<artifactId>mysql-connector-j</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- keyclock security dependency-->
+		<dependency>
+			<groupId>org.keycloak</groupId>
+			<artifactId>keycloak-spring-boot-starter</artifactId>
+			<version>${keycloak.version}</version>
+		</dependency>
+		<!-- spring security-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security.oauth.boot</groupId>
+			<artifactId>spring-security-oauth2-autoconfigure</artifactId>
+			<version>2.0.1.RELEASE</version>
+		</dependency>
+		<!-- Resource server-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+		<!-- jwt-->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/io.projectreactor/reactor-core -->
+		<dependency>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-core</artifactId>
+			<version>3.4.23</version>
+		</dependency>
+		<dependency>
+			<groupId>com.playtika.reactivefeign</groupId>
+			<artifactId>feign-reactor-spring-configuration</artifactId>
+			<version>2.0.31</version>
+		</dependency>
+		<!--
+		<dependency>
+        <groupId>org.springframework.security</groupId>
+        <artifactId>spring-security-oauth2-core</artifactId>
+        </dependency>
+
+    <dependency>
+        <groupId>org.springframework.security.oauth.boot</groupId>
+        <artifactId>spring-security-oauth2-autoconfigure</artifactId>
+        <version>2.1.6.RELEASE</version>
+    </dependency>
+    <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    <version>3.0.4</version>
+	</dependency>
+	<dependency>
+   <groupId>org.springframework.boot</groupId>
+   <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+	</dependency>
+	<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		
+		<dependency>
+    	<groupId>org.keycloak</groupId>
+    	<artifactId>keycloak-core</artifactId>
+    	<version>15.0.2</version>
+		</dependency>
+		 -->
+		<!-- 
+		<dependency>
+			<groupId>org.keycloak</groupId>
+			<artifactId>keycloak-spring-boot-starter</artifactId>
+		</dependency>
+		<dependency>
+    <groupId>org.keycloak</groupId>
+    <artifactId>keycloak-spring-security-adapter</artifactId>
+    <version>15.0.2</version>
+</dependency>
+-->
+	</dependencies>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.keycloak.bom</groupId>
+				<artifactId>keycloak-adapter-bom</artifactId>
+				<version>${keycloak.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+		</dependencies>
+	</dependencyManagement>
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+</project>
+
+==================================================================================================================================
+application.yml
+
+spring:
+  application:
+    name: JB_APP
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://nxd-ias-opbase-d.si-d09.rb-dcs.bosch.com/iam/auth/realms/e8755e6d-c0b8-469e-88be-9c64c00258e9
+          jwk-set-uri: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs #http://localhost:8080/auth/realms/registration/protocol/openid-connect/certs 
+
+jwt:
+  auth:
+    converter:
+      resource-id: e8755e6d-c0b8-469e-88be-9c64c00258e9-jb-app
+      principal-attribute: preferred_username #client will extract the value of this field from the access token
+      
+keycloak:
+  realm: e8755e6d-c0b8-469e-88be-9c64c00258e9
+  #auth-server-url: http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:8180}/auth
+  ssl-required: external
+  resource: e8755e6d-c0b8-469e-88be-9c64c00258e9-jb-app
+  use-resource-role-mappings: false
+  bearer-only: true
+  public-client: true
+  
+#=========================================
+# NEXEED Portal configuration
+#=========================================
+bmlp:
+    nexeed:
+        base-url: localhost
+        tenant-id: tenant
+        application-id: id
+        callback-base-url: localhost/callback
+        applicationName: jb-app
+        menu-config-location: ./src/main/resources/menu
+        jwt-audience: portal
+        wait-probes-in-seconds: 0
+  
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    org.jgroups: INFO
+    org.infinispan: INFO
+    org.keycloak: DEBUG
+    org.keycloak.services.managers.DefaultBruteForceProtector: DEBUG
+    org.keycloak.services.scheduled.ClusterAwareScheduledTaskRunner: DEBUG
+    org.keycloak.services.managers.UserSessionManager: DEBUG
+    org.keycloak.timer.basic: DEBUG
+    
+
+
+#server:
+  #port: '9090'
+  #servlet:
+    #context-path: /api
+
+
+
