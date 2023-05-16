@@ -1,0 +1,572 @@
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration;
+
+import com.bosch.procon.nexeed.operator.exceptions.NexeedApplicationRegistrationException;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+
+import reactor.core.publisher.Mono;
+
+public interface NexeedApplicationRegistration {
+
+    /**
+     * Shopfloor boards should be visible as menu items in Nexeed Portal.
+     * To make this possible the shopfloor boards need to be registered
+     * during a registration process.
+     * Shopfloor board names/urls etc are derived by configuration.
+     */
+    Mono<ApplicationRegistrationResponseDTO> registerApplication() throws NexeedApplicationRegistrationException;
+
+}
+===========================================================================================================================================================================================
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration;
+
+import java.io.IOException;
+
+import com.bosch.procon.nexeed.operator.domain.Root;
+import com.bosch.procon.nexeed.operator.service.dto.NexeedApplicationRegistrationInfoDTO;
+
+public interface NexeedApplicationRegistrationCallbacks {
+    NexeedApplicationRegistrationInfoDTO getInfo();
+    Root getViews() throws IOException;
+}
+
+
+=============================================================================================================================================================================================================================
+
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration.impl;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.bosch.procon.nexeed.operator.config.ApplicationProperties;
+import com.bosch.procon.nexeed.operator.config.NexeedProperties;
+import com.bosch.procon.nexeed.operator.domain.Item;
+import com.bosch.procon.nexeed.operator.domain.Root;
+import com.bosch.procon.nexeed.operator.service.dto.NexeedApplicationRegistrationInfoDTO;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedApplicationRegistrationCallbacks;
+import com.bosch.procon.nexeed.operator.util.VersionRandomizeAdapter;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+
+@Service
+public class NexeedApplicationRegistrationCallbacksImpl implements NexeedApplicationRegistrationCallbacks {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationCallbacksImpl.class);
+
+    private static final String SUBMENU_NAVIGATION_RESOURCE_TYPE = "view";
+
+    private final NexeedProperties nexeedProperties;
+    private final ApplicationProperties applicationProperties;
+    private final VersionRandomizeAdapter versionRandomizeAdapter;
+
+    private ObjectMapper objectMapper;
+
+    public NexeedApplicationRegistrationCallbacksImpl(
+            NexeedProperties nexeedProperties,
+            ApplicationProperties applicationProperties,
+            VersionRandomizeAdapter versionRandomizeAdapter) {
+        this.nexeedProperties = nexeedProperties;
+        this.applicationProperties = applicationProperties;
+        this.versionRandomizeAdapter = versionRandomizeAdapter;
+        this.objectMapper = JsonMapper.builder().build();
+    }
+
+    @Override
+    public NexeedApplicationRegistrationInfoDTO getInfo() {
+        NexeedApplicationRegistrationInfoDTO infoResponse = new NexeedApplicationRegistrationInfoDTO();
+        infoResponse.setId(nexeedProperties.getApplicationId());
+        infoResponse.setName(getApplicationName());
+        infoResponse.setVendor(applicationProperties.getVendor());
+        infoResponse.setVersion(versionRandomizeAdapter.createRandomVersion());
+        infoResponse.setBaseUrl(nexeedProperties.getCallbackBaseUrl());
+        infoResponse.setSupportedLanguages(applicationProperties.getSupportedLanguages());
+        return infoResponse;
+    }
+
+    @Override
+    public Root getViews() throws IOException {
+
+        Root items = new Root();
+
+        AtomicInteger topNavigationIndex = new AtomicInteger(this.nexeedProperties.getNavigationPriority());
+        AtomicInteger bottomNavigationIndex = new AtomicInteger(1);
+
+        String menuConfigLocation = this.nexeedProperties.getMenuConfigLocation();
+
+        try (Stream<Path> stream = Files.list(Paths.get(menuConfigLocation))) {
+            stream
+                .filter(file -> !Files.isDirectory(file))
+                .map(Path::getFileName)
+                .sorted()
+                .map(fileName -> {
+
+                    try {
+                        List<Item> subItems = objectMapper.readValue(
+                                new File(menuConfigLocation + FileSystems.getDefault().getSeparator() + fileName),
+                                new TypeReference<List<Item>>() {
+                                });
+
+                        log.debug("Menu item {} parsed successfully", fileName);
+
+                        return subItems;
+
+                    } catch (IOException e) {
+                        log.error("Can not parse {} \n reason {} ", fileName, e);
+                    }
+
+                    return List.<Item> of();
+
+                })
+                .flatMap(List::stream)
+                .map(item -> setAdditionalInfo(item, topNavigationIndex, bottomNavigationIndex))
+                .forEach(subItem -> items.all.add(subItem));
+        }
+
+        return items;
+
+    }
+
+    private Item setAdditionalInfo(Item item, AtomicInteger topNavigationIndex, AtomicInteger bottomNavigationIndex) {
+
+        if (item.getHtmlFile() == null) {
+            // Top level
+
+            item.setNavigationPriority(topNavigationIndex.getAndIncrement());
+            bottomNavigationIndex.set(1);
+
+        } else {
+            // Bottom level
+
+            item.setNavigationPriority(bottomNavigationIndex.getAndIncrement());
+
+            item.setResourceType(SUBMENU_NAVIGATION_RESOURCE_TYPE);
+
+            if (item.getNavigationRoute() != null && !item.getNavigationRoute().startsWith("#/")) {
+                item.setNavigationRoute("#/" + item.getNavigationRoute());
+            }
+        }
+
+        if (item.getScsName() == null) {
+            item.setScsName(getApplicationName());
+        }
+
+        if (item.getScsId() == null) {
+            item.setScsId(nexeedProperties.getApplicationId());
+        }
+
+        return item;
+    }
+
+    private String getApplicationName() {
+        return nexeedProperties.getApplicationName() + "-" + applicationProperties.getTenant() + "-"
+                + applicationProperties.getPlant();
+    }
+
+}
+
+
+================================================================================================================================================================================================================
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.client;
+
+import org.springframework.web.bind.annotation.PutMapping;
+
+import com.bosch.procon.nexeed.operator.config.CustomFeignConfiguration;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationRequestDTO;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+
+import reactivefeign.spring.config.ReactiveFeignClient;
+import reactor.core.publisher.Mono;
+
+@ReactiveFeignClient(name = "nexeedApplicationRegistrationClient",
+    url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
+public interface NexeedApplicationRegistrationClient {
+    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+    Mono<ApplicationRegistrationResponseDTO> registerApplication(ApplicationRegistrationRequestDTO applicationRegistrationRequest);
+}
+
+
+===========================================================================================================================================================================================================================
+====================================================================================================================================================================
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.exceptions;
+
+public class NexeedApplicationRegistrationException extends RuntimeException {
+    public NexeedApplicationRegistrationException(String errorMessage) {
+        super(errorMessage);
+    }
+}
+
+
+=========================================================================================================================================================================================
+
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration.impl;
+
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
+import org.springframework.stereotype.Service;
+
+import com.bosch.procon.nexeed.operator.client.NexeedApplicationRegistrationClient;
+import com.bosch.procon.nexeed.operator.config.ApplicationProperties;
+import com.bosch.procon.nexeed.operator.config.NexeedProperties;
+import com.bosch.procon.nexeed.operator.exceptions.NexeedApplicationRegistrationException;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationRequestDTO;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedApplicationRegistration;
+
+import feign.FeignException;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NexeedApplicationRegistrationImpl implements NexeedApplicationRegistration {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationImpl.class);
+
+    private static final String APPLICATION_NAME_SEPARATOR = "-";
+    private static final String LOG_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration status: finished/failed - application-name:{} - error:{}";
+    private static final String LOG_ROLES_REGISTRATION_REQUEST_MSG = "Application registration status: started --> request: {}";
+    private static final String LOG_ROLES_REGISTRATION_RESPONSE_MSG = "Application registration status: started <-- response: {}";
+    private static final String EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG = "Application registration failed with error: {}";
+
+    private final NexeedApplicationRegistrationClient nexeedApplicationRegistrationClient;
+    private final NexeedProperties nexeedProperties;
+    private final ApplicationProperties applicationProperties;
+
+    public NexeedApplicationRegistrationImpl(NexeedProperties nexeedProperties,
+            ApplicationProperties applicationProperties,
+            NexeedApplicationRegistrationClient nexeedApplicationRegistrationClient) {
+        this.nexeedApplicationRegistrationClient = nexeedApplicationRegistrationClient;
+        this.nexeedProperties = nexeedProperties;
+        this.applicationProperties = applicationProperties;
+    }
+
+    @Override
+    public Mono<ApplicationRegistrationResponseDTO> registerApplication()
+            throws NexeedApplicationRegistrationException {
+        ApplicationRegistrationRequestDTO applicationRegistrationRequest = new ApplicationRegistrationRequestDTO(
+                getApplicationName(), nexeedProperties.getCallbackBaseUrl());
+        log.info("Application registration status: register - application-name:{}, callbackUrl:{}",
+                applicationRegistrationRequest.getName(),
+                applicationRegistrationRequest.getBaseUrl());
+        log.info(LOG_ROLES_REGISTRATION_REQUEST_MSG, applicationRegistrationRequest);
+
+        return nexeedApplicationRegistrationClient.registerApplication(applicationRegistrationRequest)
+            .doOnError(NoFallbackAvailableException.class, ex ->
+
+            Stream.of(ex.getSuppressed())
+                .filter(FeignException.class::isInstance)
+                .map(FeignException.class::cast)
+                .findFirst()
+                .ifPresent(e -> log.error(EXCEPTION_APPLICATION_REGISTRATION_ERROR_MSG, e.getMessage()))
+
+            )
+            .doOnSuccess(applicationRegistrationResponseDTO -> log.info(
+                    "Application registration status: success - application name:{} | id:{} | version:{}",
+                    applicationRegistrationResponseDTO.getName(),
+                    applicationRegistrationResponseDTO.getId(),
+                    applicationRegistrationResponseDTO.getVersion()));
+
+    }
+
+    private String getApplicationName() {
+        return nexeedProperties.getApplicationName()
+                + APPLICATION_NAME_SEPARATOR
+                + applicationProperties.getTenant().toLowerCase()
+                + APPLICATION_NAME_SEPARATOR
+                + applicationProperties.getPlant().toLowerCase();
+    }
+
+}
+
+
+================================================================================================================================================================================================
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.dto;
+
+import java.util.List;
+
+public class NexeedApplicationRegistrationInfoDTO {
+
+    String id;
+    String name;
+    String vendor;
+    String version;
+    String baseUrl;
+    List<String> supportedLanguages;
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getVendor() {
+        return vendor;
+    }
+
+    public void setVendor(String vendor) {
+        this.vendor = vendor;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public List<String> getSupportedLanguages() {
+        return supportedLanguages;
+    }
+
+    public void setSupportedLanguages(List<String> supportedLanguages) {
+        this.supportedLanguages = supportedLanguages;
+    }
+
+}
+==============================================================================================================================================
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.web.rest;
+
+import java.io.IOException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.bosch.procon.nexeed.operator.domain.Root;
+import com.bosch.procon.nexeed.operator.service.dto.NexeedApplicationRegistrationInfoDTO;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedApplicationRegistrationCallbacks;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedRegistrationProcessAsyncExecuter;
+
+/**
+ * REST controller for handling the requests from Nexeed Portal
+ */
+@RestController
+@RequestMapping("/nexeed")
+public class NexeedApplicationRegistrationResource {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationResource.class);
+
+    private final NexeedApplicationRegistrationCallbacks nexeedApplicationRegCallbackService;
+    
+    private final NexeedRegistrationProcessAsyncExecuter nexeedRegistrationProcessAsyncExecuter;
+
+    public NexeedApplicationRegistrationResource(
+            NexeedApplicationRegistrationCallbacks nexeedApplicationRegCallbackService, 
+            NexeedRegistrationProcessAsyncExecuter nexeedRegistrationProcessAsyncExecuter) {
+        this.nexeedApplicationRegCallbackService = nexeedApplicationRegCallbackService;
+        this.nexeedRegistrationProcessAsyncExecuter = nexeedRegistrationProcessAsyncExecuter;
+    }
+
+    /**
+     * GET /info : serves info parts which are needed for Nexeed to register an application correctly
+     *
+     * @param request
+     *            the HTTP request
+     * @return necessary info part for Nexeed application registration
+     */
+    @GetMapping("/callbacks/portal-api/v1/info")
+    public NexeedApplicationRegistrationInfoDTO getInfo() {
+        log.debug("Receive /info request from Nexeed for application registration");
+        return nexeedApplicationRegCallbackService.getInfo();
+    }
+
+    /**
+     * GET /views : serves view information parts which are needed for Nexeed to register an application correctly
+     *
+     * @param request
+     *            the HTTP request
+     * @return necessary view information parts for Nexeed application registration
+     * @throws IOException 
+     */
+    @GetMapping("/callbacks/portal-api/v1/views")
+    public Root getViews() throws IOException {
+        log.debug("Receive /views request from Nexeed for application registration");
+        return nexeedApplicationRegCallbackService.getViews();
+    }
+    
+    @PostMapping("/register")
+    public void doRegistrationProcesses() {
+        log.debug("Trigger Nexeed registration via rest");
+        nexeedRegistrationProcessAsyncExecuter.doRegistrationProcesses();
+    }
+}
+
+
+
+========================================================================================================================================================================
+
+
+package com.bosch.procon.nexeed.operator.web.rest;
+
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.csrf;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.web.reactive.server.WebTestClient;
+
+import com.bosch.procon.nexeed.operator.IntegrationTest;
+
+@WithMockUser
+@AutoConfigureWebTestClient(timeout = IntegrationTest.DEFAULT_TIMEOUT)
+@IntegrationTest
+class NexeedApplicationRegistrationResourceIT {
+
+    @Autowired
+    private WebTestClient webTestClient;
+    
+    @Value("${bmlp.nexeed.navigation-priority}")
+    private int startPriority;
+
+    @BeforeEach
+    public void setupCsrf() {
+        webTestClient = webTestClient.mutateWith(csrf());
+    }
+
+    @Test
+    void testMenuItemsParsing() {
+        webTestClient
+            .get()
+            .uri("/nexeed/callbacks/portal-api/v1/views")
+            .exchange()
+            .expectStatus()
+            .is2xxSuccessful()
+            .expectHeader()
+            .contentType(MediaType.APPLICATION_JSON)
+            .expectBody()
+
+            // TOP level
+            .jsonPath("$.items[0].scsName")
+            .isEqualTo("procon-tenant-plant")
+            
+            .jsonPath("$.items[0].navigationPriority")
+            .isNumber()
+            
+            .jsonPath("$.items[0].navigationPriority")
+            .isEqualTo(startPriority)
+            
+            .jsonPath("$.items[0].navigationPath")
+            .isArray()
+            
+            .jsonPath("$.items[0].localization.title.en")
+            .isEqualTo("Central Services")
+
+            // BOTTOM level
+            
+            .jsonPath("$.items[1].resourceType")
+            .isEqualTo("view")
+            
+            .jsonPath("$.items[1].navigationPriority")
+            .isNumber()
+            
+            .jsonPath("$.items[1].navigationPriority")
+            .isEqualTo(1)
+            
+            .jsonPath("$.items[0].navigationPath")
+            .isArray()
+        ;
+    }
+
+}
+
+
+==============================================================================================================================================================================
+application.yml
+
+
+
+#=========================================
+# NEXEED Portal configuration
+#=========================================
+bmlp:
+    nexeed:
+        base-url: localhost
+        tenant-id: tenant
+        application-id: id
+        callback-base-url: localhost/callback
+        applicationName: procon
+        menu-config-location: ./src/main/resources/menu
+        jwt-audience: portal
+        wait-probes-in-seconds: 0
+
+
+=========================================================================================================================================================
+
+
+
