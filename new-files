@@ -1,0 +1,234 @@
+package com.bosch.procon.nexeed.operator.domain;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public class Root {
+
+    @JsonProperty("items")
+    public List<Item> all = new ArrayList<>();
+
+    @Override
+    public String toString() {
+        return "Root [items=" + all + "]";
+    }
+
+    
+    
+}
+
+-------------------------------------------------------------------------------------------------------------
+
+package com.bosch.procon.nexeed.operator.util;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class VersionRandomizeAdapter {
+
+    /**
+     * Create a random version in semantic version format major.minor.patch.
+     *
+     * @return random version format e.g.: 6.0.0
+     */
+    public String createRandomVersion() {
+        return ((int) (Math.random() * 10)) + "." + ((int) (Math.random() * 10)) + "." + ((int) (Math.random() * 10));
+    }
+
+}
+
+--------------------------------------------------------
+
+package com.bosch.procon.nexeed.operator.domain;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+
+@JsonInclude(Include.NON_EMPTY)
+public class Item {
+    private String scsId;
+    private String scsName;
+    private String title;
+    private Integer navigationPriority;
+    private List<String> navigationPath;
+    private String icon;
+    private String htmlFile;
+    private String resourceId;
+    private String resourceType;
+    private String navigationRoute;
+    private Localization localization;
+
+    public String getScsId() {
+        return scsId;
+    }
+
+    public void setScsId(String scsId) {
+        this.scsId = scsId;
+    }
+
+    public String getScsName() {
+        return scsName;
+    }
+
+    public void setScsName(String scsName) {
+        this.scsName = scsName;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public Integer getNavigationPriority() {
+        return navigationPriority;
+    }
+
+    public void setNavigationPriority(Integer navigationPriority) {
+        this.navigationPriority = navigationPriority;
+    }
+
+    public List<String> getNavigationPath() {
+        return navigationPath;
+    }
+
+    public void setNavigationPath(List<String> navigationPath) {
+        this.navigationPath = navigationPath;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
+    public String getHtmlFile() {
+        return htmlFile;
+    }
+
+    public void setHtmlFile(String htmlFile) {
+        this.htmlFile = htmlFile;
+    }
+
+    public String getResourceId() {
+        return resourceId;
+    }
+
+    public void setResourceId(String resourceId) {
+        this.resourceId = resourceId;
+    }
+
+    public String getResourceType() {
+        return resourceType;
+    }
+
+    public void setResourceType(String resourceType) {
+        this.resourceType = resourceType;
+    }
+
+    public String getNavigationRoute() {
+        return navigationRoute;
+    }
+
+    public void setNavigationRoute(String navigationRoute) {
+        this.navigationRoute = navigationRoute;
+    }
+
+    public Localization getLocalization() {
+        return localization;
+    }
+
+    public void setLocalization(Localization localization) {
+        this.localization = localization;
+    }
+
+    @Override
+    public String toString() {
+        return "Item [scsId=" + scsId + ", scsName=" + scsName + ", title=" + title + ", navigationPriority="
+                + navigationPriority + ", navigationPath=" + navigationPath + ", icon=" + icon + ", htmlFile="
+                + htmlFile + ", resourceId=" + resourceId + ", resourceType=" + resourceType + ", navigationRoute="
+                + navigationRoute + ", localization=" + localization + "]";
+    }
+
+}
+
+------------------------------------------------------------------------------------------------------
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration;
+
+/**
+ * This serivce is the entry point for executing the registration process of application in Nexeed portal
+ * and application roles registration in MACMA.
+ */
+
+public interface NexeedRegistrationProcessAsyncExecuter {
+
+    /**
+     * For doing a fully registration in Nexeed for Procon 2 steps need to be processed:
+     * 1. Nexeed appliccation registration
+     * 2. Nexeed roles registration
+     * both steps are here triggered/delegated after a successful application startup
+     * Before executing registration steps asynchronously this execution will wait a second
+     * to be sure that REST endpoints are available to access from nexeed portal.
+     */
+    void doRegistrationProcesses();
+}
+
+-----------------------------------------------------------------------------
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration.impl;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.bosch.procon.nexeed.operator.service.registration.NexeedApplicationRegistration;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedRegistrationProcessAsyncExecuter;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedRolesRegistration;
+
+/**
+ * This service is the entry point for executing the registration process of application in Nexeed portal and
+ * application roles registration in MACMA.
+ */
+@Service
+public class NexeedRegistrationProcessAsyncExecuterImpl implements NexeedRegistrationProcessAsyncExecuter {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedRegistrationProcessAsyncExecuterImpl.class);
+
+    private NexeedApplicationRegistration nexeedApplicationRegistration;
+    private NexeedRolesRegistration nexeedRolesRegistration;
+
+    public NexeedRegistrationProcessAsyncExecuterImpl(NexeedApplicationRegistration nexeedApplicationRegistration,
+            NexeedRolesRegistration nexeedRolesRegistration) {
+        this.nexeedApplicationRegistration = nexeedApplicationRegistration;
+        this.nexeedRolesRegistration = nexeedRolesRegistration;
+    }
+
+    @Override
+    public void doRegistrationProcesses() {
+        log.info(
+                "BMLP context - execute registration processes of: \n - application registration in Nexeed \n - application roles registration in MACMA ");
+
+        nexeedApplicationRegistration.registerApplication()
+            .then(nexeedRolesRegistration.registerApplicationRoles())
+            .subscribe();
+
+    }
+}
+
