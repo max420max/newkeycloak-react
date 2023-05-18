@@ -1,0 +1,390 @@
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration;
+
+import com.bosch.procon.nexeed.operator.domain.NexeedRolesResponse;
+import com.bosch.procon.nexeed.operator.exceptions.NexeedRolesRegistrationException;
+
+import reactor.core.publisher.Mono;
+
+public interface NexeedRolesRegistration {
+
+    /**
+     * Procon roles need to be registered in MACMA on application level.
+     * This is needed to be able to assign these roles to automatically
+     * created groups which reflects the BCD security groups
+     * These created during a SYNC with Bosch Corporate Directory (BCD) and MACMA.
+     */
+    Mono<NexeedRolesResponse> registerApplicationRoles() throws NexeedRolesRegistrationException;
+
+}
+----------------------------------------------------------------------------
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.client;
+
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+
+import com.bosch.procon.nexeed.operator.config.CustomFeignConfiguration;
+import com.bosch.procon.nexeed.operator.domain.NexeedRolesResponse;
+import com.bosch.procon.nexeed.operator.service.dto.NexeedCreateRolesDTO;
+
+import reactivefeign.spring.config.ReactiveFeignClient;
+import reactor.core.publisher.Mono;
+
+@ReactiveFeignClient(name = "nexeedRolesRegistrationClient", path = "/iam/application-management-bulk/v1", url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
+public interface NexeedRolesRegistrationClient {
+
+    @PostMapping("/tenants/{tenantId}/applications/{applicationId}/roles/create-or-update")
+    Mono<NexeedRolesResponse> createOrUpdateApplicationRoles(@PathVariable("tenantId") String tenantId,
+            @PathVariable("applicationId") String applicationId,
+            NexeedCreateRolesDTO nexeedCreateRolesDTO);
+}
+---------------------------------------------
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.exceptions;
+
+public class NexeedRolesRegistrationException extends RuntimeException {
+    public NexeedRolesRegistrationException(String errorMessage) {
+        super(errorMessage);
+    }
+}
+
+---------------------------------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.service.registration.impl;
+
+import static com.bosch.procon.nexeed.operator.security.AuthoritiesConstants.DEFAULT_ROLE_PREFIX;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
+import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+
+import com.bosch.procon.nexeed.operator.client.NexeedRolesRegistrationClient;
+import com.bosch.procon.nexeed.operator.config.ApplicationProperties;
+import com.bosch.procon.nexeed.operator.config.NexeedProperties;
+import com.bosch.procon.nexeed.operator.config.SecurityPropertiesExtension;
+import com.bosch.procon.nexeed.operator.domain.NexeedRolesResponse;
+import com.bosch.procon.nexeed.operator.exceptions.NexeedRolesRegistrationException;
+import com.bosch.procon.nexeed.operator.service.dto.NexeedCreateRolesDTO;
+import com.bosch.procon.nexeed.operator.service.registration.NexeedRolesRegistration;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import feign.FeignException;
+import feign.FeignException.Unauthorized;
+import feign.FeignException.UnprocessableEntity;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NexeedRolesRegistrationImpl implements NexeedRolesRegistration {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedRolesRegistrationImpl.class);
+
+    private static final String LOG_ROLES_REGISTRATION_ERROR_MSG = "Roles registration status: finished/failed - roles:{} - error:{}";
+    private static final String LOG_ROLES_REGISTRATION_REQUEST_MSG = "Roles registration status: started --> request: {}";
+    private static final String LOG_ROLES_REGISTRATION_RESPONSE_MSG = "Roles registration status: started <-- response: {}";
+    private static final String EXCEPTION_ROLES_REGISTRATION_ERROR_MSG = "NexeedRolesRegistration failed with error: {}";
+
+    private final ApplicationProperties applicationProperties;
+    private final NexeedProperties nexeedProperties;
+    private final SecurityPropertiesExtension securityPropertiesExtension;
+    private final NexeedRolesRegistrationClient nexeedRolesRegistrationClient;
+
+    public NexeedRolesRegistrationImpl(ApplicationProperties applicationProperties,
+            NexeedProperties nexeedProperties,
+            SecurityPropertiesExtension securityPropertiesExtension,
+            NexeedRolesRegistrationClient nexeedRolesRegistrationClient) {
+        this.applicationProperties = applicationProperties;
+        this.nexeedProperties = nexeedProperties;
+        this.securityPropertiesExtension = securityPropertiesExtension;
+        this.nexeedRolesRegistrationClient = nexeedRolesRegistrationClient;
+    }
+
+    @Override
+    public Mono<NexeedRolesResponse> registerApplicationRoles() throws NexeedRolesRegistrationException {
+        if (!StringUtils.hasText(applicationProperties.getPlant())
+                || !StringUtils.hasText(applicationProperties.getTenant())) {
+            throw new NexeedRolesRegistrationException("Missing application plant/tenant configuration");
+        }
+
+        NexeedCreateRolesDTO nexeedCreateRolesDTO = getNexeedCreateRolesDTO();
+        log.info(LOG_ROLES_REGISTRATION_REQUEST_MSG, nexeedCreateRolesDTO);
+
+        var iterator = nexeedCreateRolesDTO.getItems().iterator();
+
+        return nexeedRolesRegistrationClient.createOrUpdateApplicationRoles(nexeedProperties.getTenantId(),
+                nexeedProperties.getApplicationId(), nexeedCreateRolesDTO)
+            .doOnError(NoFallbackAvailableException.class, ex ->
+
+            Stream.of(ex.getSuppressed())
+                .filter(FeignException.class::isInstance)
+                .map(FeignException.class::cast)
+                .findFirst()
+                .ifPresent(e -> {
+                    if (e instanceof UnprocessableEntity unprocessablEntity) {
+                        log.debug("Nexeed Roles already registered");
+
+                        unprocessablEntity
+                            .responseBody()
+                            .map(byteBuffer -> new String(byteBuffer.array(), StandardCharsets.UTF_8))
+                            .map(decoded -> {
+                                try {
+                                    return new ObjectMapper().readValue(decoded, NexeedRolesResponse.class);
+                                } catch (JsonProcessingException e1) {
+                                    log.error(EXCEPTION_ROLES_REGISTRATION_ERROR_MSG, e1);
+                                }
+                                return new NexeedRolesResponse();
+                            })
+                            .filter(dto -> !CollectionUtils.isEmpty(dto.getResponses()))
+                            .ifPresent(dto -> {
+                                log.debug("Detail reason:");
+
+                                dto.getResponses().forEach(reason -> log.debug("{}", reason));
+
+                            });
+                    }
+
+                    if (e instanceof Unauthorized unauthorized) {
+                        log.error(EXCEPTION_ROLES_REGISTRATION_ERROR_MSG, unauthorized.getLocalizedMessage());
+                    }
+                })
+
+            )
+            .doOnSuccess(dto -> {
+                log.info("Nexeed Roles registration successful:");
+                dto.getResponses().forEach(reason -> log.info("Role {} | {}", iterator.next().getName(), reason));
+            });
+
+    }
+
+    private NexeedCreateRolesDTO getNexeedCreateRolesDTO() {
+        Map<String, SecurityPropertiesExtension.RoleDetails> hierarchy = securityPropertiesExtension.getHierarchy();
+
+        List<NexeedCreateRolesDTO.Item> items = hierarchy.entrySet()
+            .stream()
+            .filter(entry -> entry.getKey().startsWith(DEFAULT_ROLE_PREFIX))
+            .map(roleRoleDetailsEntry -> {
+                String roleName = roleRoleDetailsEntry.getKey();
+                SecurityPropertiesExtension.RoleDetails roleDetails = roleRoleDetailsEntry.getValue();
+                NexeedCreateRolesDTO.Item item = new NexeedCreateRolesDTO.Item();
+                item.setName(getInternalRoleName(roleName));
+                item.setDisplayName(getStylizedDisplayName(roleDetails.getDisplayName()));
+                item.setDescription(roleDetails.getDescription());
+                return item;
+            })
+            .toList();
+
+        NexeedCreateRolesDTO nexeedCreateRolesDTO = new NexeedCreateRolesDTO();
+        nexeedCreateRolesDTO.getItems().addAll(items);
+        return nexeedCreateRolesDTO;
+    }
+
+    private String getInternalRoleName(String roleName) {
+        String rolePrefix = String.format(applicationProperties.getRolePrefixFormat(),
+                applicationProperties.getTenant().toUpperCase(),
+                applicationProperties.getPlant().toUpperCase());
+        return rolePrefix + roleName.replace(DEFAULT_ROLE_PREFIX, "");
+    }
+
+    private String getStylizedDisplayName(String displayName) {
+        return String.format("%s (%s)", displayName, applicationProperties.getPlant().toUpperCase());
+    }
+
+}
+
+--------------------------
+
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.domain;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+
+
+public class NexeedRolesResponse {
+
+    private List<Response> responses;
+
+    public List<Response> getResponses() {
+        return responses;
+    }
+
+    public void setResponses(List<Response> responses) {
+        this.responses = responses;
+    }
+
+    public static class Response {
+        private int status;
+        private Body body;
+
+        public int getStatus() {
+            return status;
+        }
+
+        public void setStatus(int status) {
+            this.status = status;
+        }
+
+        public Body getBody() {
+            return body;
+        }
+
+        public void setBody(Body body) {
+            this.body = body;
+        }
+
+        static class Body {
+            private String message;
+
+            public String getMessage() {
+                return message;
+            }
+
+            public void setMessage(String message) {
+                this.message = message;
+            }
+
+            @Override
+            public String toString() {
+                return "Body [message=" + message + "]";
+            }
+
+        }
+
+        @Override
+        public String toString() {
+            return "Response [status=" + status + ", body=" + body + "]";
+        }
+
+    }
+
+
+}
+-----------------------------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.config;
+
+import java.time.Clock;
+import java.time.Duration;
+
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JCircuitBreakerFactory;
+import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigBuilder;
+import org.springframework.cloud.client.circuitbreaker.Customizer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
+
+import com.bosch.procon.nexeed.operator.client.NexeedApplicationRegistrationClient;
+import com.bosch.procon.nexeed.operator.client.OAuthClient;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.timelimiter.TimeLimiterConfig;
+import reactivefeign.client.ReactiveHttpRequestInterceptor;
+import reactivefeign.client.log.DefaultReactiveLogger;
+import reactivefeign.client.log.ReactiveLoggerListener;
+import reactivefeign.spring.config.EnableReactiveFeignClients;
+import reactivefeign.utils.MultiValueMapUtils;
+import reactor.core.publisher.Mono;
+
+@Configuration
+@EnableReactiveFeignClients(basePackages = "com.bosch.procon.nexeed.operator.client")
+public class CustomFeignConfiguration {
+
+    private static final String BEARER = "Bearer ";
+
+    @Bean
+    public ReactiveHttpRequestInterceptor oAuth2RequestInterceptor(OAuthClient nexeedAuthClient) {
+        return request -> Mono
+            .subscriberContext()
+            .map(ctx -> {
+
+                var path = request.uri().getPath();
+
+                String registrationId = null;
+                if (path.startsWith("/iam")) {
+                    registrationId = "macma";
+                }
+                
+                if (path.startsWith("/registry")) {
+                    registrationId = "portal";
+                }
+                
+
+                OAuth2AccessToken accessToken = nexeedAuthClient.getAccessToken(registrationId);
+                MultiValueMapUtils.addOrdered(request.headers(), "Authorization", BEARER + accessToken.getTokenValue());
+                return request;
+            });
+    }
+
+    @Bean
+    public ReactiveLoggerListener loggerListener() {
+        return new DefaultReactiveLogger(Clock.systemUTC(),
+                LoggerFactory.getLogger(NexeedApplicationRegistrationClient.class.getName()));
+    }
+
+    @Bean
+    public Customizer<ReactiveResilience4JCircuitBreakerFactory> defaultCustomizer(
+            ApplicationProperties applicationProperties) {
+        return factory -> factory.configureDefault(id -> new Resilience4JConfigBuilder(id)
+            .circuitBreakerConfig(CircuitBreakerConfig.ofDefaults())
+            .timeLimiterConfig(TimeLimiterConfig.custom()
+                .timeoutDuration(Duration.ofSeconds(applicationProperties.getFeignTimeoutSeconds())).build())
+            .build());
+    }
+
+}
+
+----------------------
+/*
+ * Copyright (c) 2022. Robert Bosch GmbH. All rights reserved.
+ */
+
+package com.bosch.procon.nexeed.operator.client;
+
+import org.springframework.web.bind.annotation.PutMapping;
+
+import com.bosch.procon.nexeed.operator.config.CustomFeignConfiguration;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationRequestDTO;
+import com.bosch.procon.nexeed.operator.service.dto.ApplicationRegistrationResponseDTO;
+
+import reactivefeign.spring.config.ReactiveFeignClient;
+import reactor.core.publisher.Mono;
+
+@ReactiveFeignClient(name = "nexeedApplicationRegistrationClient",
+    url = "${bmlp.nexeed.base-url}", configuration = CustomFeignConfiguration.class)
+public interface NexeedApplicationRegistrationClient {
+    @PutMapping("/registry/api/v1/registry/systems/${bmlp.nexeed.application-id}")
+    Mono<ApplicationRegistrationResponseDTO> registerApplication(ApplicationRegistrationRequestDTO applicationRegistrationRequest);
+}
+-------------------
