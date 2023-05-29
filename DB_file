@@ -14,6 +14,216 @@ databaseChangeLog:
       
       
       -----------------------------------
+      data-> sql ->
+      01-update-org-office-ci-to-bd.yaml
+      
+      databaseChangeLog:
+  - changeSet:
+      id: update-org-office-ci-to-bd
+      author: PIM8WZ
+      context: "!prod"
+      changes:
+        - update:
+            columns:
+              - column:
+                  name: NAME
+                  valueComputed: REPLACE(NAME, 'CI', 'BD')
+            tableName: ORG_OFFICE
+            where: NAME LIKE 'CI/%'
+        - update:
+            columns:
+              - column:
+                  name: NAME
+                  valueComputed: REPLACE(NAME, 'CI', 'BD')
+            tableName: ORG_OFFICE_AUD
+            where: NAME LIKE 'CI/%'
+      rollback:
+        - update:
+            columns:
+              - column:
+                  name: NAME
+                  valueComputed: REPLACE(NAME, 'BD', 'CI')
+            tableName: ORG_OFFICE
+            where: NAME LIKE 'BD/%'
+        - update:
+            columns:
+              - column:
+                  name: NAME
+                  valueComputed: REPLACE(NAME, 'BD', 'CI')
+            tableName: ORG_OFFICE_AUD
+            where: NAME LIKE 'BD/%'
+            ------------
+      02-insert-web-portal-config.yaml
+      
+      databaseChangeLog:
+  - changeSet:
+      id: insert-web-portal-config
+      author: PIM8WZ
+      context: "!tenant, local, dev"
+      changes:
+        - insert:
+            columns:
+              - column:
+                  name: id
+                  value: h23z1kacgmxh1w1rx6bo4hfc1
+              - column:
+                  name: name
+                  value: elWis DEV
+              - column:
+                  name: vendor
+                  value: BD/PPD4
+              - column:
+                  name: version
+                  value: 1.2
+              - column:
+                  name: base_url
+                  value: elWis DEV
+              - column:
+                  name: supported_languages
+                  value: en,de,cz,fr,zh
+            dbms: 'oracle'
+            tableName: WEB_PORTAL_CONFIG
+      rollback:
+        - delete:
+            tableName: WEB_PORTAL_CONFIG
+            where: id='h23z1kacgmxh1w1rx6bo4hfc1'
+            ----------------------------------------------------------
+           03-update-web-portal-config.yaml
+           
+           databaseChangeLog:
+  - changeSet:
+      id: update-web-portal-config
+      author: PIM8WZ
+      context: "!tenant, local, dev"
+      changes:
+        - update:
+            columns:
+              - column:
+                  name: id
+                  value: v0myx21h5lzj15mvp43t27kog
+              - column:
+                  name: name
+                  value: elWis Dev
+              - column:
+                  name: vendor
+                  value: BD/PPD4
+              - column:
+                  name: base_url
+                  value: https://elwis-frontend-ci-elwis-dev.apps.de3pro.osh.ipz001.internal.bosch.cloud
+            dbms: 'oracle'
+            tableName: WEB_PORTAL_CONFIG
+            where: id='h23z1kacgmxh1w1rx6bo4hfc1'
+      rollback:
+        - update:
+            columns:
+              - column:
+                  name: id
+                  value: h23z1kacgmxh1w1rx6bo4hfc1
+              - column:
+                  name: name
+                  value: elWis DEV
+              - column:
+                  name: vendor
+                  value: BD/PPD4
+              - column:
+                  name: version
+                  value: 1.2
+              - column:
+                  name: base_url
+                  value: elWis DEV
+              - column:
+                  name: supported_languages
+                  value: en,de,cz,fr,zh
+            dbms: 'oracle'
+            tableName: WEB_PORTAL_CONFIG
+            where: id='v0myx21h5lzj15mvp43t27kog'
+            
+            
+            ----------------------------------
+            04-insert-user-setter.yaml
+            
+            databaseChangeLog:
+  - changeSet:
+      id: insert-user-setter
+      author: SZY8WZ
+      context: "!prod"
+      changes:
+        - insert:
+            columns:
+              - column:
+                  name: ID
+                  value: 1105
+              - column:
+                  name: ACTIVE
+                  value: 1
+              - column:
+                  name: DEPARTMENT
+                  value: ELWIS
+              - column:
+                  name: EMAIL
+                  value: setter
+              - column:
+                  name: FAILED_LOGIN_COUNTER
+                  value: 0
+              - column:
+                  name: FIRST_NAME
+                  value: Harry
+              - column:
+                  name: LAST_NAME
+                  value: Potter
+              - column:
+                  name: LOCKED
+                  value: 0
+              - column:
+                  name: PASSWORD
+                  value: "{bcrypt}$2a$10$kc5JFWo1SufNKmWLNlRK3e3XnYPOuGfvpDJuHZTlH7wBQ52oqtDY2"
+              - column:
+                  name: ROLE
+                  value: SETTER
+              - column:
+                  name: LANGUAGE
+                  value: DE
+              - column:
+                  name: FORCE_TENANT
+                  value: "0150"
+            dbms: 'oracle'
+            tableName: USERS
+      rollback:
+        - delete:
+            tableName: USERS
+            where: id='1105'
+            
+            -------------------------------------------------
+            05-update-user-org-office-relationship.yaml
+            
+            databaseChangeLog:
+  - changeSet:
+      id: update-users-org-office-relationship
+      author: PIM8WZ
+      changes:
+        - sqlFile:
+            dbms: oracle
+            encoding: utf8
+            path: db/changelog-1.3/data/sql/update-user-org-office-relationship.sql
+            endDelimiter: \n/
+      rollback:
+        - delete:
+            tableName: user_org_office
+        - delete:
+            tableName: user_org_office_aud
+        - delete:
+            tableName: users_aud
+            
+            -------------------------------------
+            changelog-1.3->schema
+            
+            
+            
+            
+            
+            
+      
+      
       insert_web_portal_views.sql
       
 --liquibase formatted sql
