@@ -1,0 +1,47 @@
+
+    [
+        {
+            "scsId": "38agdfiuq8zy1q8r2gb5esi9f",
+            "title": "Central-Services",
+            "navigationPath": [
+                "central-services"
+            ],
+            "icon": "bosch-ic-core-data",
+            "localization": {
+                "title": {
+                    "en": "Central Services",
+                    "de": "Zentrale Dienste"
+                }
+            }
+        },
+        {
+            "scsId": "38agdfiuq8zy1q8r2gb5esi9f",
+            "title": "ProCon-Data-Service",
+            "navigationPath": [
+                "central-services",
+                "procon-data-service"
+            ],
+            "htmlFile": "${PROCON_DATA_SERVICE_URL}",
+            "resourceId": "",
+            "resourceType": "view",
+            "navigationRoute": "#/procon-data-service",
+            "localization": {
+                "title": {
+                    "en": "ProCon Data Service",
+                    "de": "ProCon Data Service"
+                },
+                "tags": {
+                    "en": [
+                        "ae",
+                        "szp",
+                        "ProCon Data Service"
+                    ],
+                    "de": [
+                        "ae",
+                        "szp",
+                        "ProCon Data Service"
+                    ]
+                }
+            }
+        }
+    ]
