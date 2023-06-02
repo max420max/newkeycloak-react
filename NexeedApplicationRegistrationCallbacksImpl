@@ -1,0 +1,177 @@
+package com.crud.demo.service.registration.impl;
+
+import com.crud.demo.config.ApplicationProperties;
+import com.crud.demo.config.NexeedProperties;
+import com.crud.demo.config.VersionRandomizeAdapter;
+import com.crud.demo.dto.NexeedApplicationRegistrationInfoDTO;
+import com.crud.demo.model.Item;
+import com.crud.demo.model.Root;
+import com.crud.demo.service.NexeedApplicationRegistrationCallbacks;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+@Service
+public class NexeedApplicationRegistrationCallbacksImpl implements NexeedApplicationRegistrationCallbacks {
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationCallbacksImpl.class);
+
+    private static final String SUBMENU_NAVIGATION_RESOURCE_TYPE = "view";
+
+    private final NexeedProperties nexeedProperties;
+    private final ApplicationProperties applicationProperties;
+    private final VersionRandomizeAdapter versionRandomizeAdapter;
+
+    private ObjectMapper objectMapper;
+
+    public NexeedApplicationRegistrationCallbacksImpl(NexeedProperties nexeedProperties, ApplicationProperties applicationProperties, VersionRandomizeAdapter versionRandomizeAdapter, ObjectMapper objectMapper) {
+        this.nexeedProperties = nexeedProperties;
+        this.applicationProperties = applicationProperties;
+        this.versionRandomizeAdapter = versionRandomizeAdapter;
+        this.objectMapper = JsonMapper.builder().build();
+    }
+
+    @Override
+    public NexeedApplicationRegistrationInfoDTO getInfo() {
+        NexeedApplicationRegistrationInfoDTO infoResponse = new NexeedApplicationRegistrationInfoDTO();
+        infoResponse.setId(nexeedProperties.getApplicationId());
+        infoResponse.setName(getApplicationName());
+        infoResponse.setVendor(applicationProperties.getVendor());
+        infoResponse.setVersion(versionRandomizeAdapter.createRandomVersion());
+        infoResponse.setBaseUrl(nexeedProperties.getCallbackBaseUrl());
+        infoResponse.setSupportedLanguages(applicationProperties.getSupportedLanguages());
+        return infoResponse;
+    }
+
+    private String getApplicationName() {
+        return nexeedProperties.getApplicationName() + "-" + applicationProperties.getTenant() + "-"
+                + applicationProperties.getPlant();
+    }
+
+    @Override
+    public Root getViews() throws IOException {
+        Root items = new Root();
+
+        AtomicInteger topNavigationIndex = new AtomicInteger(this.nexeedProperties.getNavigationPriority());
+        AtomicInteger bottomNavigationIndex = new AtomicInteger(1);
+
+        String menuConfigLocation = this.nexeedProperties.getMenuConfigLocation();
+
+        try (Stream<Path> stream = Files.list(Paths.get(menuConfigLocation))) {
+            stream
+                    .filter(file -> !Files.isDirectory(file))
+                    .map(Path::getFileName)
+                    .sorted()
+                    .map(fileName -> {
+
+                        try {
+                            List<Item> subItems = objectMapper.readValue(
+                                    new File(menuConfigLocation + FileSystems.getDefault().getSeparator() + fileName),
+                                    new TypeReference<List<Item>>() {
+                                    });
+
+                    log.debug("Menu item {} parsed successfully", fileName);
+
+                    return subItems;
+
+                        } catch (IOException e) {
+                            log.error("Can not parse {} \n reason {} ", fileName, e);
+                        }
+
+                return List.<Item>of();
+
+                    })
+                    .flatMap(List::stream)
+                    .map(item -> setAdditionalInfo(item, topNavigationIndex, bottomNavigationIndex))
+                    .forEach(subItem -> items.all.add(subItem));
+        }
+        return items;
+    }
+
+    private Item setAdditionalInfo(Item item, AtomicInteger topNavigationIndex, AtomicInteger bottomNavigationIndex) {
+
+
+        if (item.getHtmlFile() == null) {
+            // Top level
+
+            item.setNavigationPriority(topNavigationIndex.getAndIncrement());
+            bottomNavigationIndex.set(1);
+
+        } else {
+            // Bottom level
+
+            item.setNavigationPriority(bottomNavigationIndex.getAndIncrement());
+
+            item.setResourceType(SUBMENU_NAVIGATION_RESOURCE_TYPE);
+
+            if (item.getNavigationRoute() != null && !item.getNavigationRoute().startsWith("#/")) {
+                item.setNavigationRoute("#/" + item.getNavigationRoute());
+            }
+        }
+
+        if (item.getScsName() == null) {
+            item.setScsName(getApplicationName());
+        }
+
+        if (item.getScsId() == null) {
+            item.setScsId(nexeedProperties.getApplicationId());
+        }
+
+        return item;
+    }
+}
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------
+
+package com.crud.demo.service;
+
+import com.crud.demo.dto.NexeedApplicationRegistrationInfoDTO;
+import com.crud.demo.model.Root;
+
+import java.io.IOException;
+
+public interface NexeedApplicationRegistrationCallbacks {
+    NexeedApplicationRegistrationInfoDTO getInfo();
+    Root getViews() throws IOException;
+}
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+
+bmlp:
+  nexeed:
+    base-url: localhost
+    tenant-id: tenant
+    application-id: id
+    callback-base-url: localhost/callback
+    applicationName: jb-app
+    menu-config-location: D:\springboot\keycloak\CrudOperation\src\main\resources\portal
+    jwt-audience: portal
+    wait-probes-in-seconds: 0
+
+application:
+  tenant: tenant
+  plant: tenant
+  feignTimeoutSeconds: 10
