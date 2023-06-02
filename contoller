@@ -1,0 +1,44 @@
+package com.crud.demo.controller;
+
+import com.crud.demo.dto.NexeedApplicationRegistrationInfoDTO;
+import com.crud.demo.model.Root;
+import com.crud.demo.service.NexeedApplicationRegistrationCallbacks;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+
+
+@RestController
+@RequestMapping("/nexeed")
+public class NexeedApplicationRegistrationResource {
+
+
+    private final Logger log = LoggerFactory.getLogger(NexeedApplicationRegistrationResource.class);
+
+    private final NexeedApplicationRegistrationCallbacks nexeedApplicationRegCallbackService;
+
+
+    public NexeedApplicationRegistrationResource(
+            NexeedApplicationRegistrationCallbacks nexeedApplicationRegCallbackService) {
+        this.nexeedApplicationRegCallbackService = nexeedApplicationRegCallbackService;
+
+    }
+
+    @GetMapping("/callbacks/portal-api/v1/info")
+    public NexeedApplicationRegistrationInfoDTO getInfo() {
+        log.debug("Receive /info request from Nexeed for application registration");
+        return nexeedApplicationRegCallbackService.getInfo();
+    }
+
+
+    @GetMapping("/callbacks/portal-api/v1/views")
+    public Root getViews() throws IOException {
+        log.debug("Receive /views request from Nexeed for application registration");
+        return nexeedApplicationRegCallbackService.getViews();
+    }
+
+
