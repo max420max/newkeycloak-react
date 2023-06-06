@@ -1,0 +1,518 @@
+argv.js
+module.exports = require('minimist')(process.argv.slice(2));
+
+
+
+---------------------------------
+
+index.js
+
+/* eslint-disable no-console */
+const express = require('express');
+const compression = require('compression');
+const proxy = require('http-proxy-middleware');
+const { resolve } = require('path');
+const logger = require('./logger');
+const argv = require('./argv');
+const port = require('./port');
+
+const {
+  HOST,
+  PASSWORD,
+  PROXY_API_IP_VERIFY,
+  PROXY_API_LOG_LEVEL,
+  PROXY_API_SERVER_URL,
+  PROXY_API_FORWARD_PROTOCOL,
+  PROXY_API_FORWARD_PORT,
+  PROXY_API_FORWARD_HOST,
+  WAM_ALLOWED_IP,
+  WEB_CONTEXT,
+} = process.env;
+
+const app = express();
+
+const ctx = WEB_CONTEXT || '/';
+const apiPath = `${ctx}api`;
+const portalApi = `${ctx}portal-api`;
+const oauthPath = `${ctx}oauth`;
+const outputPath = resolve(process.cwd(), 'build');
+
+const proxyBackendOptions = {
+  target: PROXY_API_SERVER_URL,
+  onProxyReq(proxyReq, req) {
+    if (
+      req.originalUrl.startsWith(apiPath) ||
+      req.originalUrl.startsWith(portalApi)
+    ) {
+      if (req.headers.elwisauthorization) {
+        proxyReq.setHeader('Authorization', req.headers.elwisauthorization);
+      }
+      if (req.headers['iv-user']) {
+        proxyReq.setHeader('iv-user', req.headers['iv-user']);
+      }
+      if (req.headers.iv_server_name) {
+        proxyReq.setHeader('iv_server_name', req.headers.iv_server_name);
+      }
+      if (PROXY_API_FORWARD_HOST) {
+        proxyReq.setHeader('X-Forwarded-Host', PROXY_API_FORWARD_HOST);
+      }
+      if (PROXY_API_FORWARD_PORT) {
+        proxyReq.setHeader('X-Forwarded-Port', PROXY_API_FORWARD_PORT);
+      }
+      if (PROXY_API_FORWARD_PROTOCOL) {
+        proxyReq.setHeader('X-Forwarded-Proto', PROXY_API_FORWARD_PROTOCOL);
+      }
+    }
+  },
+  logLevel: PROXY_API_LOG_LEVEL || 'info',
+  xfwd: true,
+  preserveHeaderKeyCase: true,
+  followRedirects: true,
+  secure: true,
+  changeOrigin: true,
+  auth: `elwis-frontend-client:${PASSWORD}`,
+};
+
+if (PROXY_API_SERVER_URL) {
+  const proxyBackend = proxy(proxyBackendOptions);
+  const apiPaths = [oauthPath, apiPath, portalApi];
+  console.log(`Preparing proxy for paths: ${apiPaths}`);
+  app.use(apiPaths, proxyBackend);
+}
+
+app.use(compression());
+app.use(express.static(outputPath));
+
+const allowedIPRegex = new RegExp(WAM_ALLOWED_IP || '.*');
+
+app.get('*', (req, res) => {
+  if (PROXY_API_IP_VERIFY === 'true') {
+    let allowedRequest = false;
+    const forwardHeader = req.headers['x-forwarded-for'];
+    if (forwardHeader) {
+      const ipAddresses = forwardHeader.split(',');
+      for (let i = 0; i < ipAddresses.length; i += 1) {
+        if (ipAddresses[i] && allowedIPRegex.test(ipAddresses[i].trim())) {
+          console.log('ipAddresses allowed', ipAddresses);
+          allowedRequest = true;
+        }
+      }
+    }
+    if (allowedRequest === false) {
+      console.log(`Request ${req.url} not allowed, due to IP whitelist.`);
+      res.status(403);
+    }
+  }
+  res.sendFile(resolve(`${outputPath}${WEB_CONTEXT || ''}`, `index.html`));
+});
+
+// get the intended host and port number, use localhost and port 3000 if not provided
+const customHost = argv.host || HOST;
+const host = customHost || null; // Let http.Server use its default IPv6/4 host
+const prettyHost = customHost || 'localhost';
+
+app.listen(port, host, async err => {
+  if (err) {
+    return logger.error(err.message);
+  }
+  return logger.appStarted(port, prettyHost);
+});
+
+
+-------------------------------------
+logger.js
+
+
+/* eslint-disable no-console */
+
+const chalk = require('chalk');
+const ip = require('ip');
+
+const divider = chalk.gray('\n-----------------------------------');
+
+/**
+ * Logger middleware, you can customize it to make messages more personal
+ */
+const logger = {
+  // Called whenever there's an error on the server we want to print
+  error: err => {
+    console.error(chalk.red(err));
+  },
+
+  // Called when express.js app starts on given port w/o errors
+  appStarted: (port, host) => {
+    console.log(`Server started ! ${chalk.green('✓')}`);
+    console.log(`
+${chalk.bold('Access URLs:')}${divider}
+Localhost: ${chalk.magenta(`http://${host}:${port}`)}
+      LAN: ${chalk.magenta(`http://${ip.address()}:${port}`)}
+      ${divider}
+${chalk.blue(`Press ${chalk.italic('CTRL-C')} to stop`)}
+    `);
+  },
+};
+
+module.exports = logger;
+
+
+
+--------------------------------------------
+
+port.js
+
+const argv = require('./argv');
+
+module.exports = parseInt(argv.port || process.env.PORT || '3000', 10);
+
+
+=====================================================
+utils ->
+app.js
+
+// Needed for redux-saga es6 generator support
+import '@babel/polyfill';
+
+// Import all the third party stuff
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { Provider } from 'react-redux';
+import FontFaceObserver from 'fontfaceobserver';
+import { BrowserRouter as Router } from 'react-router-dom';
+
+import './assets/css/bootstrap.min.css';
+import '!file-loader?name=[name].[ext]!./favicon.ico';
+import 'react-redux-toastr/lib/css/react-redux-toastr.min.css';
+import 'sanitize.css/sanitize.css';
+import './assets/sass/typography.scss';
+import './assets/sass/toasts.scss';
+// Import redux store with history
+import store from './store';
+
+// Import root app
+import App from './components/App';
+
+// Import Language Provider
+import LanguageProvider from './components/LanguageProvider';
+import { DEFAULT_LOCALE } from './components/LanguageProvider/slice';
+
+// Import MACMA Provider
+import { MacmaProvider } from './components/MacmaAuth';
+
+// Import i18n messages
+import { translationMessages, appLocales } from './i18n';
+
+// Import CSS reset and Global Styles
+import './global-styles.css';
+import ErrorBoundary from './pages/ErrorBoundary';
+
+require('./manifest.json');
+
+// Observe loading of Open Sans (to remove open sans, remove the <link> tag in
+// the index.html file and this observer)
+const openSansObserver = new FontFaceObserver('Open Sans', {});
+
+// When Open Sans is loaded, add a font-family using Open Sans to the body
+openSansObserver.load().then(() => {
+  document.body.classList.add('fontLoaded');
+});
+
+const MOUNT_NODE = document.getElementById('app');
+const render = messages => {
+  ReactDOM.render(
+    <Provider store={store}>
+      <MacmaProvider>
+        <LanguageProvider messages={messages} defaultLocale={getUserLocale()}>
+          <Router basename={process.env.WEB_CONTEXT || ''}>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+          </Router>
+        </LanguageProvider>
+      </MacmaProvider>
+    </Provider>,
+    MOUNT_NODE,
+  );
+};
+
+const getUserLocale = () => {
+  const userLocale =
+    window.navigator.userLanguage || window.navigator.language?.split('-')[0];
+  return appLocales.includes(userLocale) ? userLocale : DEFAULT_LOCALE;
+};
+
+if (module.hot) {
+  // Hot reloadable React components and translation json files
+  // modules.hot.accept does not accept dynamic dependencies,
+  // have to be constants at compile-time
+  module.hot.accept(['./i18n', 'components/App'], () => {
+    ReactDOM.unmountComponentAtNode(MOUNT_NODE);
+    render(translationMessages);
+  });
+}
+
+// Chunked polyfill for browsers without Intl support
+if (!window.Intl) {
+  Promise.resolve(import('intl'))
+    .then(() =>
+      Promise.all([
+        import('intl/locale-data/jsonp/en.js'),
+        import('intl/locale-data/jsonp/de.js'),
+        import('intl/locale-data/jsonp/fr.js'),
+        import('intl/locale-data/jsonp/cs.js'),
+        import('intl/locale-data/jsonp/zh.js'),
+      ]),
+    ) // eslint-disable-line prettier/prettier
+    .then(() => render(translationMessages))
+    .catch(err => {
+      throw err;
+    });
+} else {
+  render(translationMessages);
+}
+
+====================
+index.html
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <!-- The first thing in any HTML file should be the charset -->
+    <meta charset="utf-8" />
+
+    <!-- Make the page mobile compatible -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Allow installing the app to the homescreen -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <title>Bosch-FuP</title>
+  </head>
+
+  <body>
+    <!-- Display a message if JS has been disabled on the browser. -->
+    <noscript
+      >If you're seeing this message, that means
+      <strong>JavaScript has been disabled on your browser</strong>, please
+      <strong>enable JS</strong> to make this app work.</noscript
+    >
+
+    <!-- The app hooks into this div -->
+    <div id="app"></div>
+
+    <!-- Open Sans Font -->
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans:400,700"
+      rel="stylesheet"
+    />
+
+    <!-- A lot of magic happens in this file. HtmlWebpackPlugin automatically injects all assets (e.g. bundle.js, main.css) with the correct HTML tags, which is why they are missing in this file. Don't add any assets here! (Check out webpack.dev.babel.js and webpack.prod.babel.js if you want to know more) -->
+  </body>
+</html>
+
+----------------------
+=================================
+package.json
+
+{
+  "name": "bosch-elwis",
+  "version": "1.2.1-rc.98",
+  "description": "Digitalisierung-Fertigungs-und-Pruefhinweise",
+  "engines": {
+    "npm": ">=6.14.16",
+    "node": ">=14.19.0"
+  },
+  "scripts": {
+    "prebuild": "npm run build:clean",
+    "build": "cross-env NODE_ENV=production webpack --config internals/webpack/webpack.prod.babel.js --color --progress",
+    "build:clean": "rimraf ./build",
+    "start": "cross-env NODE_ENV=development webpack serve --config ./internals/webpack/webpack.dev.babel.js --progress",
+    "start:production": "npm run test && npm run build && npm run start:prod",
+    "start:prod": "DEPLOY_ENV=Production cross-env NODE_ENV=production node server",
+    "start:prod:windows": "SET DEPLOY_ENV=Production & SET NODE_ENV=production & nodemon server",
+    "clean:all": "npm run test:clean && npm run build:clean",
+    "lint": "npm run lint:js",
+    "lint:css": "stylelint './app/**/*.js'",
+    "lint:eslint": "npm run prettify && eslint --ignore-path .gitignore",
+    "lint:eslint:fix": "eslint --ignore-path .gitignore --fix",
+    "lint:js": "npm run lint:eslint --fix . ",
+    "lint-check": "eslint --print-config .",
+    "lint:staged": "lint-staged",
+    "pretest": "npm run test:clean",
+    "test:clean": "rimraf ./coverage",
+    "test": "cross-env NODE_ENV=test jest --coverage",
+    "test:watch": "cross-env NODE_ENV=test jest --watchAll --verbose=false  --coverage",
+    "coveralls": "cat ./coverage/lcov.info | coveralls",
+    "prettify": "prettier-eslint --write 'app/**/*.{js,jsx}'"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run lint:staged ",
+      "pre-push": "npm run lint && npm test"
+    }
+  },
+  "lint-staged": {
+    "*.js": [
+      "npm run lint:eslint:fix",
+      "git add --force",
+      "jest --bail --findRelatedTests"
+    ],
+    "*.json": [
+      "prettier --write",
+      "git add --force"
+    ]
+  },
+  "dependencies": {
+    "@babel/polyfill": "7.0.0",
+    "@loadable/component": "5.15.2",
+    "@reduxjs/toolkit": "1.5.0",
+    "axios": "0.21.1",
+    "babel-polyfill": "6.23.0",
+    "chalk": "2.4.1",
+    "compression": "1.7.3",
+    "createjs-module": "0.8.3",
+    "cropperjs": "1.2.2",
+    "cross-env": "5.2.0",
+    "dompurify": "2.2.7",
+    "dotenv-webpack": "1.5.5",
+    "express": "4.16.4",
+    "final-form": "4.20.1",
+    "final-form-arrays": "3.0.2",
+    "final-form-set-field-data": "^1.0.2",
+    "fontfaceobserver": "2.0.13",
+    "history": "4.7.2",
+    "hoist-non-react-statics": "3.0.1",
+    "http-proxy-middleware": "0.20.0",
+    "intl": "1.2.5",
+    "invariant": "2.2.4",
+    "ip": "1.1.5",
+    "jwt-decode": "2.2.0",
+    "lodash": "4.17.21",
+    "minimist": "1.2.5",
+    "moment": "2.24.0",
+    "node-polyfill-webpack-plugin": "1.0.2",
+    "prop-types": "15.6.2",
+    "react": "17.0.1",
+    "react-accessible-accordion": "3.3.3",
+    "react-beautiful-dnd": "10.0.3",
+    "react-bootstrap": "2.5.0",
+    "react-calendar": "2.19.2",
+    "react-circular-progressbar": "2.1.0",
+    "react-custom-scrollbars": "4.2.1",
+    "react-dom": "17.0.1",
+    "react-dropzone": "4.2.3",
+    "react-final-form": "6.5.9",
+    "react-final-form-arrays": "3.1.4",
+    "react-final-form-listeners": "1.0.3",
+    "react-helmet": "5.2.0",
+    "react-intl": "2.7.2",
+    "react-moment": "0.7.0",
+    "react-oauth2-code-pkce": "1.13.2",
+    "react-pdf": "4.1.0",
+    "react-quill": "2.0.0",
+    "react-redux": "7.2.2",
+    "react-redux-toastr": "7.4.5",
+    "react-router-dom": "5.2.0",
+    "react-select": "5.4.0",
+    "react-tooltip": "4.2.21",
+    "redux": "4.0.5",
+    "redux-saga": "1.1.3",
+    "reselect": "4.0.0",
+    "sanitize.css": "4.1.0",
+    "twix": "1.3.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "7.20.7",
+    "@babel/core": "7.20.7",
+    "@babel/plugin-transform-modules-commonjs": "7.20.11",
+    "@babel/plugin-transform-react-constant-elements": "7.20.2",
+    "@babel/plugin-transform-react-inline-elements": "7.18.6",
+    "@babel/preset-env": "7.20.2",
+    "@babel/preset-react": "7.18.6",
+    "@babel/register": "7.18.9",
+    "@loadable/babel-plugin": "5.15.3",
+    "@loadable/webpack-plugin": "5.15.2",
+    "@testing-library/jest-dom": "5.16.5",
+    "@testing-library/react": "12.1.5",
+    "@testing-library/user-event": "14.4.3",
+    "@wojtekmaj/enzyme-adapter-react-17": "0.4.1",
+    "add-asset-html-webpack-plugin": "3.1.1",
+    "babel-eslint": "10.1.0",
+    "babel-loader": "9.1.2",
+    "babel-plugin-dynamic-import-node": "2.3.3",
+    "babel-plugin-lodash": "3.3.4",
+    "babel-plugin-react-intl": "3.0.1",
+    "babel-plugin-react-transform": "3.0.0",
+    "babel-plugin-transform-react-remove-prop-types": "0.4.19",
+    "circular-dependency-plugin": "5.0.2",
+    "circular-json": "0.5.1",
+    "compare-versions": "3.4.0",
+    "compression-webpack-plugin": "7.1.2",
+    "coveralls": "3.0.2",
+    "css-loader": "5.0.1",
+    "enzyme": "3.11.0",
+    "enzyme-react-intl": "2.0.5",
+    "enzyme-to-json": "3.3.4",
+    "eslint": "5.7.0",
+    "eslint-config-airbnb": "17.1.0",
+    "eslint-config-airbnb-base": "13.1.0",
+    "eslint-config-prettier": "3.1.0",
+    "eslint-import-resolver-webpack": "0.10.1",
+    "eslint-plugin-import": "2.14.0",
+    "eslint-plugin-jsx-a11y": "6.1.2",
+    "eslint-plugin-prettier": "3.0.0",
+    "eslint-plugin-react": "7.11.1",
+    "eslint-plugin-react-hooks": "4.2.0",
+    "eslint-plugin-redux-saga": "1.2.1",
+    "esquery": "1.0.0",
+    "eventsource-polyfill": "0.9.6",
+    "exports-loader": "2.0.0",
+    "file-loader": "6.2.0",
+    "file-saver": "2.0.2",
+    "html-loader": "1.3.2",
+    "html-webpack-plugin": "4.5.1",
+    "husky": "4.3.8",
+    "identity-obj-proxy": "3.0.0",
+    "imports-loader": "2.0.0",
+    "jest": "29.3.1",
+    "jest-canvas-mock": "1.1.0",
+    "jest-cli": "29.3.1",
+    "jest-environment-jsdom": "29.3.1",
+    "jest-watch-toggle-config": "2.0.1",
+    "lint-staged": "7.3.0",
+    "msw": "1.1.0",
+    "node-plop": "0.16.0",
+    "node-sass": "5.0.0",
+    "null-loader": "4.0.1",
+    "prettier": "1.14.3",
+    "prettier-eslint": "8.8.2",
+    "prettier-eslint-cli": "4.7.1",
+    "react-app-polyfill": "0.1.3",
+    "react-test-renderer": "16.6.0",
+    "redux-saga-test-plan": "4.0.1",
+    "rimraf": "2.6.2",
+    "sass-loader": "10.1.1",
+    "script-loader": "0.7.2",
+    "shelljs": "0.8.3",
+    "sinon": "4.2.0",
+    "style-loader": "2.0.0",
+    "stylelint": "9.6.0",
+    "stylelint-config-recommended": "2.1.0",
+    "svg-url-loader": "7.1.1",
+    "url-loader": "4.1.1",
+    "webpack": "5.20.1",
+    "webpack-cli": "4.10.0",
+    "webpack-dev-middleware": "4.1.0",
+    "webpack-dev-server": "3.11.2",
+    "webpack-hot-middleware": "2.25.0",
+    "webpack-pwa-manifest": "4.3.0",
+    "whatwg-fetch": "2.0.3"
+  }
+}
+
+===================
+
+
+
+
+
+
