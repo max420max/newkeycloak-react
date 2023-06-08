@@ -1,0 +1,1266 @@
+Server ->
+argv.js
+
+module.exports = require('minimist')(process.argv.slice(2));
+
+
+--------------------
+
+index.js
+
+/* eslint-disable no-console */
+const express = require('express');
+const compression = require('compression');
+const proxy = require('http-proxy-middleware');
+const { resolve } = require('path');
+const logger = require('./logger');
+const argv = require('./argv');
+const port = require('./port');
+
+const {
+  HOST,
+  PASSWORD,
+  PROXY_API_IP_VERIFY,
+  PROXY_API_LOG_LEVEL,
+  PROXY_API_SERVER_URL,
+  PROXY_API_FORWARD_PROTOCOL,
+  PROXY_API_FORWARD_PORT,
+  PROXY_API_FORWARD_HOST,
+  WAM_ALLOWED_IP,
+  WEB_CONTEXT,
+} = process.env;
+
+const app = express();
+
+const ctx = WEB_CONTEXT || '/';
+const apiPath = `${ctx}api`;
+const portalApi = `${ctx}portal-api`;
+const oauthPath = `${ctx}oauth`;
+const outputPath = resolve(process.cwd(), 'build');
+
+const proxyBackendOptions = {
+  target: PROXY_API_SERVER_URL,
+  onProxyReq(proxyReq, req) {
+    if (
+      req.originalUrl.startsWith(apiPath) ||
+      req.originalUrl.startsWith(portalApi)
+    ) {
+      if (req.headers.elwisauthorization) {
+        proxyReq.setHeader('Authorization', req.headers.elwisauthorization);
+      }
+      if (req.headers['iv-user']) {
+        proxyReq.setHeader('iv-user', req.headers['iv-user']);
+      }
+      if (req.headers.iv_server_name) {
+        proxyReq.setHeader('iv_server_name', req.headers.iv_server_name);
+      }
+      if (PROXY_API_FORWARD_HOST) {
+        proxyReq.setHeader('X-Forwarded-Host', PROXY_API_FORWARD_HOST);
+      }
+      if (PROXY_API_FORWARD_PORT) {
+        proxyReq.setHeader('X-Forwarded-Port', PROXY_API_FORWARD_PORT);
+      }
+      if (PROXY_API_FORWARD_PROTOCOL) {
+        proxyReq.setHeader('X-Forwarded-Proto', PROXY_API_FORWARD_PROTOCOL);
+      }
+    }
+  },
+  logLevel: PROXY_API_LOG_LEVEL || 'info',
+  xfwd: true,
+  preserveHeaderKeyCase: true,
+  followRedirects: true,
+  secure: true,
+  changeOrigin: true,
+  auth: `elwis-frontend-client:${PASSWORD}`,
+};
+
+if (PROXY_API_SERVER_URL) {
+  const proxyBackend = proxy(proxyBackendOptions);
+  const apiPaths = [oauthPath, apiPath, portalApi];
+  console.log(`Preparing proxy for paths: ${apiPaths}`);
+  app.use(apiPaths, proxyBackend);
+}
+
+app.use(compression());
+app.use(express.static(outputPath));
+
+const allowedIPRegex = new RegExp(WAM_ALLOWED_IP || '.*');
+
+app.get('*', (req, res) => {
+  if (PROXY_API_IP_VERIFY === 'true') {
+    let allowedRequest = false;
+    const forwardHeader = req.headers['x-forwarded-for'];
+    if (forwardHeader) {
+      const ipAddresses = forwardHeader.split(',');
+      for (let i = 0; i < ipAddresses.length; i += 1) {
+        if (ipAddresses[i] && allowedIPRegex.test(ipAddresses[i].trim())) {
+          console.log('ipAddresses allowed', ipAddresses);
+          allowedRequest = true;
+        }
+      }
+    }
+    if (allowedRequest === false) {
+      console.log(`Request ${req.url} not allowed, due to IP whitelist.`);
+      res.status(403);
+    }
+  }
+  res.sendFile(resolve(`${outputPath}${WEB_CONTEXT || ''}`, `index.html`));
+});
+
+// get the intended host and port number, use localhost and port 3000 if not provided
+const customHost = argv.host || HOST;
+const host = customHost || null; // Let http.Server use its default IPv6/4 host
+const prettyHost = customHost || 'localhost';
+
+app.listen(port, host, async err => {
+  if (err) {
+    return logger.error(err.message);
+  }
+  return logger.appStarted(port, prettyHost);
+});
+
+
+-----
+
+logger.js
+
+/* eslint-disable no-console */
+
+const chalk = require('chalk');
+const ip = require('ip');
+
+const divider = chalk.gray('\n-----------------------------------');
+
+/**
+ * Logger middleware, you can customize it to make messages more personal
+ */
+const logger = {
+  // Called whenever there's an error on the server we want to print
+  error: err => {
+    console.error(chalk.red(err));
+  },
+
+  // Called when express.js app starts on given port w/o errors
+  appStarted: (port, host) => {
+    console.log(`Server started ! ${chalk.green('✓')}`);
+    console.log(`
+${chalk.bold('Access URLs:')}${divider}
+Localhost: ${chalk.magenta(`http://${host}:${port}`)}
+      LAN: ${chalk.magenta(`http://${ip.address()}:${port}`)}
+      ${divider}
+${chalk.blue(`Press ${chalk.italic('CTRL-C')} to stop`)}
+    `);
+  },
+};
+
+module.exports = logger;
+
+
+-----------------------
+
+port.js
+
+const argv = require('./argv');
+
+module.exports = parseInt(argv.port || process.env.PORT || '3000', 10);
+
+..............................................
+==================================
+
+app-> 
+
+app.js
+
+// Needed for redux-saga es6 generator support
+import '@babel/polyfill';
+
+// Import all the third party stuff
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { Provider } from 'react-redux';
+import FontFaceObserver from 'fontfaceobserver';
+import { BrowserRouter as Router } from 'react-router-dom';
+
+import './assets/css/bootstrap.min.css';
+import '!file-loader?name=[name].[ext]!./favicon.ico';
+import 'react-redux-toastr/lib/css/react-redux-toastr.min.css';
+import 'sanitize.css/sanitize.css';
+import './assets/sass/typography.scss';
+import './assets/sass/toasts.scss';
+// Import redux store with history
+import store from './store';
+
+// Import root app
+import App from './components/App';
+
+// Import Language Provider
+import LanguageProvider from './components/LanguageProvider';
+import { DEFAULT_LOCALE } from './components/LanguageProvider/slice';
+
+// Import MACMA Provider
+import { MacmaProvider } from './components/MacmaAuth';
+
+// Import i18n messages
+import { translationMessages, appLocales } from './i18n';
+
+// Import CSS reset and Global Styles
+import './global-styles.css';
+import ErrorBoundary from './pages/ErrorBoundary';
+
+require('./manifest.json');
+
+// Observe loading of Open Sans (to remove open sans, remove the <link> tag in
+// the index.html file and this observer)
+const openSansObserver = new FontFaceObserver('Open Sans', {});
+
+// When Open Sans is loaded, add a font-family using Open Sans to the body
+openSansObserver.load().then(() => {
+  document.body.classList.add('fontLoaded');
+});
+
+const MOUNT_NODE = document.getElementById('app');
+const render = messages => {
+  ReactDOM.render(
+    <Provider store={store}>
+      <MacmaProvider>
+        <LanguageProvider messages={messages} defaultLocale={getUserLocale()}>
+          <Router basename={process.env.WEB_CONTEXT || ''}>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+          </Router>
+        </LanguageProvider>
+      </MacmaProvider>
+    </Provider>,
+    MOUNT_NODE,
+  );
+};
+
+const getUserLocale = () => {
+  const userLocale =
+    window.navigator.userLanguage || window.navigator.language?.split('-')[0];
+  return appLocales.includes(userLocale) ? userLocale : DEFAULT_LOCALE;
+};
+
+if (module.hot) {
+  // Hot reloadable React components and translation json files
+  // modules.hot.accept does not accept dynamic dependencies,
+  // have to be constants at compile-time
+  module.hot.accept(['./i18n', 'components/App'], () => {
+    ReactDOM.unmountComponentAtNode(MOUNT_NODE);
+    render(translationMessages);
+  });
+}
+
+// Chunked polyfill for browsers without Intl support
+if (!window.Intl) {
+  Promise.resolve(import('intl'))
+    .then(() =>
+      Promise.all([
+        import('intl/locale-data/jsonp/en.js'),
+        import('intl/locale-data/jsonp/de.js'),
+        import('intl/locale-data/jsonp/fr.js'),
+        import('intl/locale-data/jsonp/cs.js'),
+        import('intl/locale-data/jsonp/zh.js'),
+      ]),
+    ) // eslint-disable-line prettier/prettier
+    .then(() => render(translationMessages))
+    .catch(err => {
+      throw err;
+    });
+} else {
+  render(translationMessages);
+}
+
+-------------
+
+index.html
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <!-- The first thing in any HTML file should be the charset -->
+    <meta charset="utf-8" />
+
+    <!-- Make the page mobile compatible -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Allow installing the app to the homescreen -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <title>Bosch-FuP</title>
+  </head>
+
+  <body>
+    <!-- Display a message if JS has been disabled on the browser. -->
+    <noscript
+      >If you're seeing this message, that means
+      <strong>JavaScript has been disabled on your browser</strong>, please
+      <strong>enable JS</strong> to make this app work.</noscript
+    >
+
+    <!-- The app hooks into this div -->
+    <div id="app"></div>
+
+    <!-- Open Sans Font -->
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans:400,700"
+      rel="stylesheet"
+    />
+
+    <!-- A lot of magic happens in this file. HtmlWebpackPlugin automatically injects all assets (e.g. bundle.js, main.css) with the correct HTML tags, which is why they are missing in this file. Don't add any assets here! (Check out webpack.dev.babel.js and webpack.prod.babel.js if you want to know more) -->
+  </body>
+</html>
+
+
+------------
+================
+
+app -> .env
+
+
+NEXEED_DOMAIN_BASE_URL=https://sgpvmc0882.apac.bosch.com
+ELWIS_DOMAIN_BASE_URL=https://elwis-frontend-ci-elwis-dev.apps.de3pro.osh.ipz001.internal.bosch.cloud
+CLIENT_ID=1wt0a9qqz78kg1wj78l129pgib
+TENANT_ID=3866886b-dd9a-474f-b786-229c8fa9bdfc
+API_URL=http://localhost:8080/api/v1
+LOGIN_URL=http://localhost:8080
+PASSWORD=secret
+ELWIS_ENV=local
+ELWIS_BE_DIRECT_URL=http://localhost:8080
+
+
+-------------------------
+app -> component -> MacmaAuth
+
+constant.js
+
+const PROVIDER_RE_RENDER_TIME = 60 * 1000;
+const PROVIDER_RE_RENDER_DELAY_TIME = 300;
+
+export { PROVIDER_RE_RENDER_TIME, PROVIDER_RE_RENDER_DELAY_TIME };
+
+----------
+
+index.js
+
+import MacmaProvider from './MacmaProvider';
+import MacmaContext from './MacmaContext';
+import MacmaRefreshAuth from './MacmaRefreshAuth';
+
+export { MacmaProvider, MacmaContext, MacmaRefreshAuth };
+
+-----------
+MacmaContext.js
+
+import { useContext } from 'react';
+import { AuthContext } from 'react-oauth2-code-pkce';
+
+const MacmaContext = () => {
+  useContext(AuthContext);
+  return null;
+};
+
+export default MacmaContext;
+
+--------------
+
+MacmaProvider.js
+
+import React, { useMemo } from 'react';
+import { AuthProvider } from 'react-oauth2-code-pkce';
+
+import LoadingIndicator from '../LoadingIndicator';
+
+import { isLocalEnvironment, getToken } from '../../utils/helper';
+
+const MacmaProvider = ({ children }) => {
+  const authConfig = useMemo(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const tenantId = queryParams.get('tenantId') || process.env.TENANT_ID;
+    const clientId = queryParams.get('clientId') || process.env.CLIENT_ID;
+    const baseUrl = `${
+      process.env.NEXEED_DOMAIN_BASE_URL
+    }/iam/auth/realms/${tenantId}/protocol/openid-connect`;
+
+    return {
+      clientId: `${clientId}-frontend`,
+      authorizationEndpoint: `${baseUrl}/auth`,
+      logoutEndpoint: `${baseUrl}/logout`,
+      tokenEndpoint: `${baseUrl}/token`,
+      redirectUri: isLocalEnvironment
+        ? 'http://localhost:3000'
+        : `${process.env.ELWIS_DOMAIN_BASE_URL}/Dashboard`,
+      scope: 'openid',
+      decodeToken: true,
+      postLogin: () => {
+        window.location.reload();
+      },
+      onRefreshTokenExpire: event => event.login(),
+    };
+  }, []);
+
+  return (
+    <>
+      {isLocalEnvironment ? (
+        children
+      ) : (
+        <AuthProvider authConfig={authConfig}>
+          {getToken() ? children : <LoadingIndicator />}
+        </AuthProvider>
+      )}
+    </>
+  );
+};
+
+export default MacmaProvider;
+
+----------------
+
+macmaRefereshAuth.js
+
+
+import React, { useEffect, useState } from 'react';
+
+import MacmaContext from './MacmaContext';
+import MacmaProvider from './MacmaProvider';
+
+import { getToken } from '../../utils/helper';
+import {
+  PROVIDER_RE_RENDER_TIME,
+  PROVIDER_RE_RENDER_DELAY_TIME,
+} from './constants';
+
+const MacmaRefreshAuth = () => {
+  const [forceUpdate, setForceUpdate] = useState(false);
+  const [token, setToken] = useState(getToken());
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const currentToken = getToken();
+      if (token !== currentToken) {
+        setToken(currentToken);
+        setForceUpdate(false);
+        setTimeout(() => setForceUpdate(true), PROVIDER_RE_RENDER_DELAY_TIME);
+      }
+    }, PROVIDER_RE_RENDER_TIME);
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      {forceUpdate && (
+        <MacmaProvider>
+          <MacmaContext />
+        </MacmaProvider>
+      )}
+    </>
+  );
+};
+
+export default MacmaRefreshAuth;
+
+=================
+
+app-> pages -> login
+
+index.js
+
+import React from 'react';
+import { connect } from 'react-redux';
+import { compose } from 'redux';
+import { injectIntl } from 'react-intl';
+import { Form, Field } from 'react-final-form';
+import { withRouter } from 'react-router-dom';
+
+import { login, setCurrentUser } from './saga';
+import styles from './styles.scss';
+import elwisLogo from './elwisLogo.png';
+import boschLogo from './boschLogo.png';
+import messages from './messages';
+import commonMessages from '../../utils/messages/commons';
+import { isLocalEnvironment } from '../../utils/helper';
+
+import { LoginPropsType, ErrorMessagePropsType } from './types';
+
+const ErrorMessage = ({ name }) => (
+  <Field
+    name={name}
+    subscription={{
+      error: true,
+      touched: true,
+      submitError: true,
+      dirtySinceLastSubmit: true,
+    }}
+  >
+    {({ meta: { error, submitError, touched, dirtySinceLastSubmit } }) =>
+      // eslint-disable-next-line no-nested-ternary
+      error && touched ? (
+        <div className={styles.errorMessage}>{error}</div>
+      ) : submitError && !dirtySinceLastSubmit ? (
+        <div className={styles.errorMessage}>{submitError}</div>
+      ) : null
+    }
+  </Field>
+);
+
+ErrorMessage.propTypes = ErrorMessagePropsType;
+
+class Login extends React.PureComponent {
+  componentDidMount() {
+    if (!isLocalEnvironment) {
+      this.props.setCurrentUser();
+    }
+  }
+
+  render() {
+    if (!isLocalEnvironment) {
+      return null;
+    }
+
+    const {
+      onSubmit,
+      intl: { formatMessage },
+    } = this.props;
+
+    const handleSubmit = (values, FormApi, complete) => {
+      onSubmit({ email: values.login, password: values.password }, () => {
+        complete({
+          login: formatMessage(messages.wrongLogin),
+          password: formatMessage(messages.wrongPassword),
+        });
+      });
+    };
+
+    const validate = values => {
+      const errors = {};
+      if (!values.login) {
+        errors.login = formatMessage(commonMessages.mandatory);
+      }
+      if (!values.password) {
+        errors.password = formatMessage(commonMessages.mandatory);
+      }
+      return errors;
+    };
+
+    return (
+      <>
+        <nav className={`navbar ${styles.navbar}`}>
+          <a className={`navbar-brand ${styles.navbarBrand}`}>
+            <img src={boschLogo} alt="Bosch" />
+          </a>
+        </nav>
+        <div className={`container-fluid ${styles.fullScreenHeight}`}>
+          <div className={`row ${styles.rowNoPadding} ${styles.fullHeight}`}>
+            <div className={`col-sm-4 ${styles.loginContainer}`}>
+              <Form
+                initialValues={{ login: '', password: '' }}
+                validate={validate}
+                onSubmit={handleSubmit}
+                render={({
+                  // eslint-disable-next-line no-shadow
+                  handleSubmit,
+                  submitting,
+                  errors,
+                  touched,
+                  submitErrors,
+                  dirtyFieldsSinceLastSubmit,
+                }) => {
+                  const showLoginError =
+                    (errors.login && touched.login) ||
+                    (submitErrors &&
+                      submitErrors.login &&
+                      !dirtyFieldsSinceLastSubmit.login);
+                  const showPasswordError =
+                    (errors.password && touched.password) ||
+                    (submitErrors &&
+                      submitErrors.password &&
+                      !dirtyFieldsSinceLastSubmit.password);
+
+                  return (
+                    <form onSubmit={handleSubmit} className={styles.centered}>
+                      <Field
+                        name="login"
+                        className={showLoginError ? styles.error : ''}
+                        placeholder={formatMessage(messages.login)}
+                        data-qa-id="login-input-field"
+                        component="input"
+                        type="text"
+                      />
+                      <ErrorMessage name="login" />
+                      <Field
+                        name="password"
+                        className={showPasswordError ? styles.error : ''}
+                        placeholder={formatMessage(messages.password)}
+                        type="password"
+                        data-qa-id="password-input-field"
+                        component="input"
+                      />
+                      <ErrorMessage name="password" />
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        data-qa-id="submit-login-button"
+                      >
+                        {formatMessage(messages.login)}
+                      </button>
+                    </form>
+                  );
+                }}
+              />
+            </div>
+            <div className={`col-sm-8 ${styles.logoContainer}`}>
+              <img
+                src={elwisLogo}
+                className={`${styles.logo} ${styles.centered}`}
+                alt="Elwis"
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+}
+
+Login.propTypes = LoginPropsType;
+
+function mapDispatchToProps(dispatch) {
+  return {
+    dispatch,
+    onSubmit: (value, errorFunc) => {
+      dispatch(login(value, errorFunc));
+    },
+    setCurrentUser: () => {
+      dispatch(setCurrentUser());
+    },
+  };
+}
+
+const withConnect = connect(
+  null,
+  mapDispatchToProps,
+);
+
+export default compose(
+  withRouter,
+  withConnect,
+  injectIntl,
+)(Login);
+
+
+----------
+
+loadLables.js
+
+/**
+ *
+ * Asynchronously loads the component for Login
+ *
+ */
+import React from 'react';
+import loadable from '@loadable/component';
+
+import LoadingIndicator from '../../components/LoadingIndicator';
+
+export default loadable(() => import('./index'), {
+  fallback: <LoadingIndicator />,
+});
+
+----------------
+message.js
+
+import { defineMessages } from 'react-intl';
+
+export default defineMessages({
+  login: {
+    id: 'app.Login.login',
+    defaultMessage: 'Login',
+  },
+  password: {
+    id: 'app.Login.password',
+    defaultMessage: 'Passwort',
+  },
+  wrongLogin: {
+    id: 'app.Login.wrongLogin',
+    defaultMessage: 'Benutzerkennung falsch',
+  },
+  wrongPassword: {
+    id: 'app.Login.wrongPassword',
+    defaultMessage: 'Passwort falsch',
+  },
+});
+
+--------------
+
+selectors.js
+
+
+import { createSelector } from 'reselect';
+
+/**
+ * Direct selector to the login state domain
+ */
+const selectLoginDomain = state => state.get('login');
+
+/**
+ * Other specific selectors
+ */
+
+/**
+ * Default selector used by Login
+ */
+
+const makeSelectLogin = () =>
+  createSelector(selectLoginDomain, substate => substate);
+
+export { selectLoginDomain };
+export default makeSelectLogin;
+
+
+-------------
+
+types.js
+
+
+import PropTypes from 'prop-types';
+
+const { string, object, func } = PropTypes;
+
+const LoginPropsType = {
+  onSubmit: func.isRequired,
+  intl: object.isRequired,
+};
+
+const ErrorMessagePropsType = {
+  name: string.isRequired,
+};
+
+export { LoginPropsType, ErrorMessagePropsType };
+
+----
+================
+
+app-> utils -> apiStore
+
+apiStoreProvider.js
+
+import { ApiStoreProvider } from './request';
+import store from '../../store';
+import {
+  loadedCurrentUser,
+  setIsAutomaticLoginPrevented,
+} from '../../components/Layout/slice';
+
+const actionOnError = error => {
+  const { status } = error.response;
+
+  if (status === 401 || status === 403) {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('token');
+
+    store.dispatch(setIsAutomaticLoginPrevented(true));
+    store.dispatch(loadedCurrentUser(null));
+  }
+};
+
+export default new ApiStoreProvider(actionOnError);
+
+
+---------------
+
+constants.js
+
+/* eslint-disable prefer-destructuring */
+const API_URL = process.env.API_URL;
+const LOGIN_URL = process.env.LOGIN_URL;
+const PASSWORD = process.env.PASSWORD;
+const NODE_ENV = process.env.NODE_ENV;
+
+const auth = {
+  username: 'elwis-frontend-client',
+  password: PASSWORD,
+};
+
+const defaultHeaders = {
+  'If-Modified-Since': 'Mon, 26 Jul 1997 05:00:00 GMT',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+};
+
+export { API_URL, LOGIN_URL, NODE_ENV, auth, defaultHeaders };
+
+-------------
+
+endpoints.json
+
+[
+  {
+    "key": "workplace",
+    "path": "/workplace"
+  },
+  {
+    "key": "workplaces",
+    "path": "/workplaces"
+  },
+  {
+    "key": "user",
+    "path": "/user"
+  },
+  {
+    "key": "workSequence",
+    "path": "/worksequence"
+  },
+  {
+    "key": "item",
+    "path": "/item"
+  },
+  {
+    "key": "itemWorkplace",
+    "path": "/item/workplace"
+  },
+  {
+    "key": "symbol",
+    "path": "/symbol"
+  },
+  {
+    "key": "model",
+    "path": "/model"
+  },
+  {
+    "key": "modelchangediff",
+    "path": "/modelchangediff"
+  },
+  {
+    "key": "documents",
+    "path": "/documents"
+  },
+  {
+    "key": "filesLink",
+    "path": "/files",
+    "contentType": "multipart/form-data"
+  },
+  {
+    "key": "applicationNames",
+    "path": "/applicationnames"
+  },
+  {
+    "key": "operationAndSerialNumber",
+    "path": "/operationandserialnumber"
+  },
+  {
+    "key": "instructions",
+    "path": "/instructions",
+    "contentType": "multipart/form-data"
+  },
+  {
+    "key": "instructionsJSON",
+    "path": "/instructions"
+  },
+  {
+    "key": "dashboard",
+    "path": "/dashboard"
+  },
+  {
+    "key": "dashboardStatistics",
+    "path": "/dashboard/statistics"
+  },
+  {
+    "key": "workerDocumentList",
+    "path": "/workplaces"
+  },
+  {
+    "key": "workersAssignment",
+    "path": "/workers-assignment"
+  },
+  {
+    "key": "workflowList",
+    "path": "/workflow"
+  },
+  {
+    "key": "partOperation",
+    "path": "/part-operation"
+  },
+  {
+    "key": "tenant",
+    "path": "/tenant"
+  },
+  {
+    "key": "tenantConfiguration",
+    "path": "/tenant-configuration"
+  },
+  {
+    "key": "manufacturingArea",
+    "path": "/manufacturing-area"
+  },
+  {
+    "key": "orgOffice",
+    "path": "/org-office"
+  },
+  {
+    "key": "workStep",
+    "path": "/work-step"
+  },
+  {
+    "key": "usageList",
+    "path": "/usage-list"
+  },
+  {
+    "key": "pqi",
+    "path": "/pqi"
+  },
+  {
+    "key": "basicAuth",
+    "path": "/basic-auth"
+  }
+]
+---------------------
+
+request.js
+
+/* eslint-disable prefer-destructuring */
+import axios from 'axios';
+import toastr from '../customToastr';
+import { getToken } from '../helper';
+import errorsMessages from '../messages/errors';
+import {
+  API_URL,
+  LOGIN_URL,
+  NODE_ENV,
+  auth,
+  defaultHeaders,
+} from './constants';
+
+const endpoints = require('./endpoints.json');
+
+function displayServerErrorMsg(msg) {
+  return NODE_ENV !== 'production' ? `(${msg})` : '';
+}
+
+class ApiStoreProvider {
+  constructor(actionOnError) {
+    this.localStorage = {};
+    this.localStorage.token = getToken();
+    this.actionOnError = actionOnError;
+    this.apiStore = new ApiStore(this.localStorage.token, this.actionOnError);
+  }
+
+  get store() {
+    const token = getToken();
+    if (this.localStorage.token !== token) {
+      this.localStorage.token = token;
+
+      this.apiStore = new ApiStore(this.localStorage.token, this.actionOnError);
+    }
+    return this.apiStore;
+  }
+}
+
+class ApiStore {
+  constructor(token, actionOnError) {
+    this.token = token;
+    this.initEndpoints(actionOnError);
+  }
+
+  createAxios(url, contentType, responseType) {
+    const authHeader = process.env.PROXY_API_SERVER_URL
+      ? 'ElwisAuthorization'
+      : 'Authorization';
+
+    const isBasic = this.token?.startsWith('Basic');
+
+    return axios.create({
+      baseURL: `${API_URL}${url}`,
+      headers: {
+        ...defaultHeaders,
+        [authHeader]: isBasic ? this.token : `Bearer ${this.token}`,
+        'Content-Type': contentType || 'application/json; charset=utf-8',
+      },
+      validateStatus(status) {
+        return status >= 200 && status <= 300;
+      },
+      responseType: responseType || 'json',
+    });
+  }
+
+  initEndpoints(actionOnError) {
+    const myInterceptorSuccess = response =>
+      response?.data ? response.data : response;
+
+    const handleErrorCodeMessage = data => {
+      if (data.warning) {
+        toastr.warning(errorsMessages[data.warning]);
+      } else if (data.error) {
+        toastr.error(
+          displayServerErrorMsg(data.message),
+          errorsMessages[data.error],
+        );
+      }
+    };
+
+    const myInterceptorError = error => {
+      const { response } = error;
+
+      if (response === undefined) {
+        toastr.error(errorsMessages.backendUnavailableError);
+
+        window.location.reload();
+
+        return Promise.reject(error);
+      }
+
+      const { data } = response;
+
+      if (data) {
+        if (data.validation) {
+          return data;
+        }
+
+        handleErrorCodeMessage(data);
+      } else {
+        toastr.error(errorsMessages.error);
+      }
+
+      if (actionOnError && typeof actionOnError === 'function') {
+        actionOnError(error);
+      }
+
+      return Promise.reject(error);
+    };
+
+    this.login = axios.create({
+      baseURL: `${LOGIN_URL}/oauth/token`,
+      auth,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      },
+      validateStatus: status =>
+        (status >= 200 && status < 300) || status === 400,
+    });
+    this.login.interceptors.response.use(myInterceptorSuccess);
+
+    this.pdf = this.createAxios('/pdf', null, 'blob');
+
+    this.pdf.interceptors.response.use(
+      response => response,
+      myInterceptorError,
+    );
+
+    endpoints.forEach(endpoint => {
+      const { key, path, contentType, responseType } = endpoint;
+      this[key] = this.createAxios(path, contentType, responseType);
+
+      this[key].interceptors.response.use(
+        myInterceptorSuccess,
+        myInterceptorError,
+      );
+    });
+  }
+}
+
+export { displayServerErrorMsg, ApiStoreProvider };
+
+-----------------
+Utils ->
+token.js
+
+const jwtDecode = require('jwt-decode');
+
+function isTokenExpired() {
+  const token = localStorage.getItem('token');
+
+  if (token && !token.startsWith('Basic')) {
+    const decodedToken = jwtDecode(token);
+
+    const d = new Date(0);
+    d.setUTCSeconds(decodedToken.exp);
+
+    if (d < new Date()) {
+      return true;
+    }
+  }
+  return false;
+}
+export { isTokenExpired };
+
+-------------
+
+validation.js
+
+import { FormattedMessage } from 'react-intl';
+import React from 'react';
+import commonMessages from './messages/commons';
+
+const forbiddenCharactersRegex = /[-=~[\]°§´`'€/+!@#$%^&*();:?"{}|<>]/g;
+const forbiddenCharactersBeginningAndEndingRegex = /^[,._]/i;
+
+const composeValidators = (...validators) => value =>
+  validators.reduce((error, validator) => error || validator(value), undefined);
+
+const required = value =>
+  value ? '' : <FormattedMessage {...commonMessages.pleaseFillIn} />;
+
+const requiredArray = values =>
+  values && (values.length || values.size) ? (
+    undefined
+  ) : (
+    <FormattedMessage {...commonMessages.pleaseFillIn} />
+  );
+
+const requiredBoschUrl = value => {
+  if (value) {
+    const found = /(?<!www)\.bosch\.com/.test(value);
+
+    if (!found) {
+      return <FormattedMessage {...commonMessages.requiredBoschUrl} />;
+    }
+  }
+  return '';
+};
+
+const requiredSharePointOrEdocProUrl = value => {
+  if (value) {
+    const boschSuffix = /\.bosch\.com/;
+    const edocPro = /(edocpro\.sp-apps(-d2)?)/;
+    const sharepoint = /((inside-share-hosted-apps(-d2)?)|(sites\.inside-share[34])|(sites\.share2))/;
+    const regex = new RegExp(
+      `(${edocPro.source}|${sharepoint.source})${boschSuffix.source}`,
+    );
+    const found = regex.test(value);
+    if (!found) {
+      return (
+        <FormattedMessage {...commonMessages.requiredSharePointOrEdocProUrl} />
+      );
+    }
+  }
+  return '';
+};
+
+const maxLength = max => value =>
+  value?.length > max ? (
+    <>
+      <FormattedMessage {...commonMessages.mustBe} />
+      {` ${max} `}
+      <FormattedMessage {...commonMessages.charactersOrLess} />
+    </>
+  ) : (
+    undefined
+  );
+
+const maxLength50 = maxLength(50);
+
+const minLength = min => value =>
+  value && value.length < min
+    ? <FormattedMessage {...commonMessages.mustBe} /> +
+      min +
+      <FormattedMessage {...commonMessages.charactersOrMore} />
+    : undefined;
+
+const number = value =>
+  value && parseInt(value, 10) ? (
+    <FormattedMessage {...commonMessages.mustBeNumber} />
+  ) : (
+    undefined
+  );
+
+const minValue = min => value =>
+  value && value < min
+    ? <FormattedMessage {...commonMessages.mustBeAtLeast} /> + min
+    : undefined;
+
+const maxValue = max => value =>
+  value && value > max
+    ? <FormattedMessage {...commonMessages.mustBeAtMost} /> + max
+    : undefined;
+
+const email = value =>
+  value && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(value) ? (
+    <FormattedMessage {...commonMessages.invalidEmail} />
+  ) : (
+    undefined
+  );
+
+const forbiddenCharacters = value =>
+  value && forbiddenCharactersRegex.test(value) ? (
+    <FormattedMessage {...commonMessages.invalidCharacters} />
+  ) : (
+    undefined
+  );
+
+const forbiddenCharactersBeginningAndEnding = value =>
+  value && forbiddenCharactersBeginningAndEndingRegex.test(value) ? (
+    <FormattedMessage {...commonMessages.firstAndLastLetterMustBe} />
+  ) : (
+    undefined
+  );
+
+const bool = value =>
+  value === true || value === false || value === 'true' || value === 'false' ? (
+    undefined
+  ) : (
+    <FormattedMessage {...commonMessages.mustBeBoolean} />
+  );
+
+const date = value =>
+  value &&
+  !/^([0-2]\d|(3)[0-1])(\.)(((0)\d)|((1)[0-2]))(\.)\d{4}$/.test(value) ? (
+    <FormattedMessage {...commonMessages.pleaseFormatDate} />
+  ) : (
+    undefined
+  );
+
+// taken from https://gist.github.com/dperini/729294
+const webUrlRegex = /^(?:(?:(?:https?|ftp):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$/i; // NOSONAR
+const URL_CHARACTER_COUNTER_LIMIT = 2048;
+
+const url = value => {
+  const regExp = new RegExp(webUrlRegex, 'g');
+  return regExp.test(value) ? (
+    undefined
+  ) : (
+    <FormattedMessage {...commonMessages.invalidURL} />
+  );
+};
+
+const departmentMustBePresent = val =>
+  val ? '' : <FormattedMessage {...commonMessages.departmentIsNotPlanner} />;
+
+export {
+  composeValidators,
+  required,
+  requiredArray,
+  requiredBoschUrl,
+  requiredSharePointOrEdocProUrl,
+  maxLength,
+  maxLength50,
+  forbiddenCharacters,
+  forbiddenCharactersBeginningAndEnding,
+  minLength,
+  number,
+  minValue,
+  maxValue,
+  email,
+  bool,
+  date,
+  webUrlRegex,
+  url,
+  URL_CHARACTER_COUNTER_LIMIT,
+  forbiddenCharactersRegex,
+  forbiddenCharactersBeginningAndEndingRegex,
+  departmentMustBePresent,
+};
+
+---------
+
+
+
+
+
+
+
+
+
+
+
+
